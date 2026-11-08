@@ -40,7 +40,7 @@
 <body>
     <div class="header">
         <h1>Jable & MissAv 影片自動典藏庫</h1>
-        <p>目前庫存 <span id="total-count">70</span> 部影片 | 篩選顯示 <span id="visible-count">70</span> 部</p>
+        <p>目前庫存 <span id="total-count">75</span> 部影片 | 篩選顯示 <span id="visible-count">75</span> 部</p>
     </div>
     <div class="filter-panel">
         <div class="filter-row">
@@ -74,6 +74,81 @@
         </div>
     </div>
     <div class="grid" id="video-grid">
+        
+        <div class="card" data-title="無碼流出 av 在線看" data-actress="未知" data-tags="vr, vr" data-date="2026-11-08">
+            <img src="https://missav.ws/missav/logo-square.png" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="無碼流出 AV 在線看">無碼流出 AV 在線看</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 未知</span>
+                    <span class="date">📅 2026-11-08</span>
+                </div>
+                <div class="tags" title="VR, VR">🏷️ VR, VR</div>
+                <div class="footer">
+                    <a href="https://missav.ws/uncensored-leak" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="本月熱門 av 在線看" data-actress="未知" data-tags="vr, vr" data-date="2026-11-08">
+            <img src="https://missav.ws/missav/logo-square.png" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="本月熱門 AV 在線看">本月熱門 AV 在線看</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 未知</span>
+                    <span class="date">📅 2026-11-08</span>
+                </div>
+                <div class="tags" title="VR, VR">🏷️ VR, VR</div>
+                <div class="footer">
+                    <a href="https://missav.ws/dm273/monthly-hot" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="本週熱門 av 在線看" data-actress="未知" data-tags="vr, vr" data-date="2026-11-08">
+            <img src="https://missav.ws/missav/logo-square.png" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="本週熱門 AV 在線看">本週熱門 AV 在線看</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 未知</span>
+                    <span class="date">📅 2026-11-08</span>
+                </div>
+                <div class="tags" title="VR, VR">🏷️ VR, VR</div>
+                <div class="footer">
+                    <a href="https://missav.ws/dm170/weekly-hot" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="今日熱門 av 在線看" data-actress="未知" data-tags="vr, vr" data-date="2026-11-08">
+            <img src="https://missav.ws/missav/logo-square.png" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="今日熱門 AV 在線看">今日熱門 AV 在線看</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 未知</span>
+                    <span class="date">📅 2026-11-08</span>
+                </div>
+                <div class="tags" title="VR, VR">🏷️ VR, VR</div>
+                <div class="footer">
+                    <a href="https://missav.ws/dm301/today-hot" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="無碼流出 av 在線看" data-actress="未知" data-tags="vr, vr" data-date="2026-11-08">
+            <img src="https://missav.ws/missav/logo-square.png" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="無碼流出 AV 在線看">無碼流出 AV 在線看</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 未知</span>
+                    <span class="date">📅 2026-11-08</span>
+                </div>
+                <div class="tags" title="VR, VR">🏷️ VR, VR</div>
+                <div class="footer">
+                    <a href="https://missav.ws/dm817/uncensored-leak" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
         
         <div class="card" data-title="中文字幕 av 在线看" data-actress="未知" data-tags="vr, vr" data-date="2026-11-08">
             <img src="https://missav.ws/missav/logo-square.png" alt="封面" loading="lazy" referrerpolicy="no-referrer">
@@ -1145,7 +1220,7 @@
             let visibleCount = 0;
             cards.forEach(card => {
                 const actress = card.getAttribute('data-actress') || '';
-                const tags = card.getAttribute('data-tags') || '';
+                const tags = card.getAttribute('data-tags'] || '';
                 
                 const matchKeyword = selectedKeywords.length === 0 || selectedKeywords.some(kw => tags.includes(kw));
                 const matchActress = !actressVal || actress.includes(actressVal);
@@ -1165,7 +1240,7 @@
             const isOldest = dateSort.value === 'oldest';
             const sortedCards = cards.slice().sort((a, b) => {
                 const dateA = a.getAttribute('data-date') || '';
-                const dateB = b.getAttribute('data-date') || '';
+                const dateB = b.getAttribute('data-date'] || '';
                 return isOldest ? dateA.localeCompare(dateB) : dateB.localeCompare(dateA);
             });
             sortedCards.forEach(card => grid.appendChild(card));
