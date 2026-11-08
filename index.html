@@ -1220,7 +1220,7 @@
             let visibleCount = 0;
             cards.forEach(card => {
                 const actress = card.getAttribute('data-actress') || '';
-                const tags = card.getAttribute('data-tags'] || '';
+                const tags = card.getAttribute('data-tags') || '';
                 
                 const matchKeyword = selectedKeywords.length === 0 || selectedKeywords.some(kw => tags.includes(kw));
                 const matchActress = !actressVal || actress.includes(actressVal);
@@ -1240,7 +1240,7 @@
             const isOldest = dateSort.value === 'oldest';
             const sortedCards = cards.slice().sort((a, b) => {
                 const dateA = a.getAttribute('data-date') || '';
-                const dateB = b.getAttribute('data-date'] || '';
+                const dateB = b.getAttribute('data-date') || '';
                 return isOldest ? dateA.localeCompare(dateB) : dateB.localeCompare(dateA);
             });
             sortedCards.forEach(card => grid.appendChild(card));
