@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 import gspread
 from google.oauth2.service_account import Credentials
 
-# 讓 GitHub Actions 即時輸出終端機日誌，不再卡在緩衝區
+# 即時輸出終端機日誌至 GitHub Actions
 print = functools.partial(print, flush=True)
 
 DB_FILE = "videos.db"
@@ -61,6 +61,7 @@ def save_video(title, cover_url, tags, actress, video_url):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     try:
+        # 新增或更新資料，更新時同步刷新 created_at 確保網頁置頂顯示
         cursor.execute("""
             INSERT INTO videos (title, cover_url, tags, actress, video_url, created_at)
             VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
@@ -79,8 +80,8 @@ def save_video(title, cover_url, tags, actress, video_url):
 def get_all_videos():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    # 改為依照最新時間由新到舊排列
-    cursor.execute("SELECT id, title, cover_url, tags, actress, video_url, created_at FROM videos ORDER BY created_at DESC")
+    # 依照最新收錄與更新時間由新到舊排序
+    cursor.execute("SELECT id, title, cover_url, tags, actress, video_url, created_at FROM videos ORDER BY created_at DESC, id DESC")
     rows = cursor.fetchall()
     conn.close()
     return rows
@@ -143,7 +144,8 @@ def generate_index_html():
     all_actresses = set()
     all_tags_set = set()
     cards_html = ""
-    for v in reversed(videos):
+    
+    for v in videos:
         vid_id, title, cover_url, tags, actress, video_url, created_at = v
         actress_display = actress.strip() if actress and actress.strip() else "未知/多人"
         if actress:
@@ -370,7 +372,7 @@ async def is_cf_challenge(page):
         ]):
             return True
         
-        # 檢查 DOM 是否存在 Cloudflare 特徵
+        # 檢查 DOM 特徵
         cf_cnt = await page.locator(
             '#challenge-running, #challenge-form, #cf-turnstile, iframe[src*="challenges.cloudflare.com"], #cf-challenge-running'
         ).count()
@@ -386,18 +388,17 @@ async def is_cf_challenge(page):
         return False
 
 async def wait_until_cf_cleared(page, max_wait_sec=45):
-    """主動等待 Cloudflare 盾通過，並嘗試自動點擊 Turnstile 驗證框"""
+    """主動等待 Cloudflare 盾通過，並自動點擊 Turnstile 驗證框"""
     for _ in range(max_wait_sec):
         cf_active = await is_cf_challenge(page)
         if not cf_active:
-            # 檢查頁面是否已經渲染出關鍵主體內容
             if await page.locator('.video-img-box, a[href*="/videos/"], h1, h4, .video-info').count() > 0:
                 return True
             title = await page.title()
             if title.strip() and title.strip().lower() != "jable.tv":
                 return True
 
-        # 自動偵測並點擊 Turnstile Checkbox
+        # 自動偵測並點擊 Turnstile 勾選框
         try:
             for frame in page.frames:
                 if "challenges.cloudflare.com" in frame.url:
@@ -420,7 +421,6 @@ async def safe_navigate(page, url, is_category=True, max_retries=2):
             await page.goto(url, timeout=60000, wait_until="domcontentloaded")
             cleared = await wait_until_cf_cleared(page, max_wait_sec=40)
             
-            # 分類列表頁顯式等待卡片載入
             if is_category:
                 try:
                     await page.wait_for_selector('.video-img-box, a[href*="/videos/"], div.col-6', timeout=15000)
@@ -429,11 +429,10 @@ async def safe_navigate(page, url, is_category=True, max_retries=2):
 
             await page.wait_for_timeout(2000)
 
-            # 若為分類頁但方塊數為 0，代表可能卡在驗證重導向，進行重試刷新
             if is_category:
                 has_boxes = await page.locator('.video-img-box, a[href*="/videos/"]').count()
                 if has_boxes == 0 and attempt < max_retries:
-                    print(f"    ⚠️ 第 {attempt} 次導航未抓到影片元素（可能處於驗證加載），正在重新整理重試...")
+                    print(f"    ⚠️ 第 {attempt} 次導航未抓到影片元素，重新整理重試中...")
                     await page.wait_for_timeout(3000)
                     continue
 
@@ -455,7 +454,7 @@ async def safe_navigate(page, url, is_category=True, max_retries=2):
     return False
 
 def extract_field_after_label(soup, label):
-    """精確抓取頁面中指定標籤（如 '女優' 或 '類型'）後面的字串內容"""
+    """精準抓取指定標籤（如 '女優' 或 '類型'）後方的字串內容"""
     pattern = re.compile(rf'{label}\s*[:：]')
     for node in soup.find_all(string=pattern):
         container = node.find_parent(['div', 'p', 'li', 'tr', 'section'])
@@ -546,9 +545,7 @@ async def run_scraper():
                         if full_url not in seen_urls:
                             seen_urls.add(full_url)
                             try:
-                                # 加入隨機微幅延遲，避免短時間過多請求觸發 Cloudflare
                                 await page.wait_for_timeout(random.randint(1200, 2500))
-                                
                                 await safe_navigate(page, full_url, is_category=False, max_retries=2)
                                 detail_soup = BeautifulSoup(await page.content(), 'html.parser')
                                 
@@ -643,14 +640,14 @@ async def run_scraper():
                             if v_tag and v_tag.get('poster'):
                                 cover_image_url = v_tag['poster']
 
-                        # 3. 抓取「女優: 」後面的字串
+                        # 3. 女優名稱：抓取「女優: 」後面的字串
                         actress_name = extract_field_after_label(detail_soup, "女優")
                         if not actress_name:
                             actress_elems = detail_soup.select('a[href*="/actresses/"], a[href*="/actress/"]')
                             actresses = [a.text.strip() for a in actress_elems if a.text.strip()]
                             actress_name = ", ".join(list(dict.fromkeys(actresses))) if actresses else "未知"
 
-                        # 4. 抓取「類型: 」後面的字串
+                        # 4. 類型標籤：抓取「類型: 」後面的字串
                         tags_str = extract_field_after_label(detail_soup, "類型")
                         if not tags_str:
                             genre_elems = detail_soup.select('a[href*="/genres/"]')
@@ -660,7 +657,7 @@ async def run_scraper():
                         tags_lower = tags_str.lower()
                         has_genre_match = any(kw in tags_lower for kw in target_genre_keywords)
 
-                        # 輔助比對：避免無頭環境語系切換至英文 slug
+                        # 輔助比對 slug 避免語系轉為英文
                         if not has_genre_match:
                             for g in detail_soup.select('a[href*="/genres/"]'):
                                 g_href = g.get('href', '').lower()
