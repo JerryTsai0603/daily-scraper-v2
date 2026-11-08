@@ -1,10 +1,3 @@
-這是因為字串拼接的括號在複製貼上時漏掉了結尾的右括號 `)`。
-
-為了百分之百避免任何縮排或括號語法錯誤，我們改回最穩定、乾淨的 **f-string 多行字串**，並且將 CSS 與 JS 的雙大括號跳脫處理（`{{` 與 `}}`），這樣 Python 就絕對不會把它們誤認為變數。
-
-請直接將以下**完整無誤的 `scraper.py**` 複製並覆蓋到您的專案中：
-
-```python
 import os
 import json
 import asyncio
@@ -504,5 +497,3 @@ async def run_scraper():
 
 if __name__ == "__main__":
     asyncio.run(run_scraper())
-
-```
