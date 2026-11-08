@@ -4,6 +4,8 @@ import asyncio
 import sqlite3
 import smtplib
 import re
+import random
+import functools
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -12,6 +14,9 @@ from playwright_stealth import Stealth
 from bs4 import BeautifulSoup
 import gspread
 from google.oauth2.service_account import Credentials
+
+# 讓 GitHub Actions 即時輸出終端機日誌，不再卡在緩衝區
+print = functools.partial(print, flush=True)
 
 DB_FILE = "videos.db"
 RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL", "edgedge0603@gmail.com")
@@ -37,7 +42,7 @@ def init_db():
     if "actress" not in columns:
         cursor.execute("ALTER TABLE videos ADD COLUMN actress TEXT")
     
-    # 清理非影片的分類或無效路徑，保留所有正常影片
+    # 清理非影片的分類或無效路徑
     cursor.execute("""
         DELETE FROM videos 
         WHERE video_url LIKE '%/dm278%' 
@@ -56,7 +61,6 @@ def save_video(title, cover_url, tags, actress, video_url):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     try:
-        # 若已有紀錄但先前欄位為未知，自動更新為最新資料
         cursor.execute("""
             INSERT INTO videos (title, cover_url, tags, actress, video_url)
             VALUES (?, ?, ?, ?, ?)
@@ -354,44 +358,102 @@ def send_email_report(new_videos):
     except Exception as e:
         print(f"❌ 郵件寄送失敗: {e}")
 
-async def wait_until_cf_cleared(page, max_wait_sec=40):
-    """等待 Cloudflare 驗證盾通過"""
-    for _ in range(max_wait_sec):
-        title = await page.title()
-        title_lower = title.lower()
-        is_cf = any(k in title_lower for k in [
-            "just a moment", "請稍候", "请稍候", "checking your browser",
-            "challenge", "cloudflare", "attention required"
-        ])
-        if not is_cf and title.strip():
-            return True
-        await page.wait_for_timeout(1000)
-    return False
-
-async def safe_navigate(page, url, is_category=True):
+async def is_cf_challenge(page):
+    """精準檢測頁面是否正處於 Cloudflare 驗證狀態"""
     try:
-        await page.goto(url, timeout=60000, wait_until="domcontentloaded")
-        cleared = await wait_until_cf_cleared(page, max_wait_sec=40)
+        title = (await page.title()).lower()
+        if any(k in title for k in [
+            "just a moment", "請稍候", "请稍候", "checking your browser",
+            "challenge", "attention required", "verify you are human"
+        ]):
+            return True
         
-        if not cleared:
-            print(f"    ⚠️ Cloudflare 驗證超時 ({url})，當前標題: '{await page.title()}'")
-            return False
-
-        # 若是清單分類頁，顯式等待影片卡片出現
-        if is_category:
-            try:
-                await page.wait_for_selector('.video-img-box, a[href*="/videos/"], div.col-6', timeout=15000)
-            except Exception:
-                pass
-                
-        await page.wait_for_timeout(2500)
-        return True
-    except Exception as e:
-        print(f"    ⚠️ 導航失敗 ({url}): {e}")
+        # 檢查 DOM 是否存在 Cloudflare 特徵
+        cf_cnt = await page.locator(
+            '#challenge-running, #challenge-form, #cf-turnstile, iframe[src*="challenges.cloudflare.com"], #cf-challenge-running'
+        ).count()
+        if cf_cnt > 0:
+            return True
+            
+        content = (await page.content()).lower()
+        if "cf-browser-verification" in content or "checking your browser before accessing" in content:
+            return True
+            
+        return False
+    except Exception:
         return False
 
+async def wait_until_cf_cleared(page, max_wait_sec=45):
+    """主動等待 Cloudflare 盾通過，並嘗試自動點擊 Turnstile 驗證框"""
+    for _ in range(max_wait_sec):
+        cf_active = await is_cf_challenge(page)
+        if not cf_active:
+            # 檢查頁面是否已經渲染出關鍵主體內容
+            if await page.locator('.video-img-box, a[href*="/videos/"], h1, h4, .video-info').count() > 0:
+                return True
+            title = await page.title()
+            if title.strip() and title.strip().lower() != "jable.tv":
+                return True
+
+        # 自動偵測並點擊 Turnstile Checkbox
+        try:
+            for frame in page.frames:
+                if "challenges.cloudflare.com" in frame.url:
+                    checkbox = frame.locator('input[type="checkbox"], .ctp-checkbox-label, #challenge-stage')
+                    if await checkbox.count() > 0:
+                        await checkbox.first.click(timeout=2000)
+                        await page.wait_for_timeout(2000)
+                        break
+        except Exception:
+            pass
+
+        await page.wait_for_timeout(1000)
+
+    return not await is_cf_challenge(page)
+
+async def safe_navigate(page, url, is_category=True, max_retries=2):
+    """具備重試、Cloudflare 穿透與 DOM 載入確認的導航函式"""
+    for attempt in range(1, max_retries + 1):
+        try:
+            await page.goto(url, timeout=60000, wait_until="domcontentloaded")
+            cleared = await wait_until_cf_cleared(page, max_wait_sec=40)
+            
+            # 分類列表頁顯式等待卡片載入
+            if is_category:
+                try:
+                    await page.wait_for_selector('.video-img-box, a[href*="/videos/"], div.col-6', timeout=15000)
+                except Exception:
+                    pass
+
+            await page.wait_for_timeout(2000)
+
+            # 若為分類頁但方塊數為 0，代表可能卡在驗證重導向，進行重試刷新
+            if is_category:
+                has_boxes = await page.locator('.video-img-box, a[href*="/videos/"]').count()
+                if has_boxes == 0 and attempt < max_retries:
+                    print(f"    ⚠️ 第 {attempt} 次導航未抓到影片元素（可能處於驗證加載），正在重新整理重試...")
+                    await page.wait_for_timeout(3000)
+                    continue
+
+            if not cleared:
+                title = await page.title()
+                print(f"    ⚠️ Cloudflare 驗證超時 ({url})，當前標題: '{title}'")
+                if attempt < max_retries:
+                    await page.wait_for_timeout(3000)
+                    continue
+                return False
+
+            return True
+        except Exception as e:
+            print(f"    ⚠️ 導航失敗 ({url}, 第 {attempt} 次): {e}")
+            if attempt < max_retries:
+                await page.wait_for_timeout(3000)
+                continue
+            return False
+    return False
+
 def extract_field_after_label(soup, label):
-    """精確抓取頁面中指定標籤（如 "女優" 或 "類型"）後面的字串內容"""
+    """精確抓取頁面中指定標籤（如 '女優' 或 '類型'）後面的字串內容"""
     pattern = re.compile(rf'{label}\s*[:：]')
     for node in soup.find_all(string=pattern):
         container = node.find_parent(['div', 'p', 'li', 'tr', 'section'])
@@ -419,8 +481,6 @@ def extract_field_after_label(soup, label):
 async def run_scraper():
     init_db()
     jable_target_paths = ["/tags/pantyhose/", "/tags/black-pantyhose/", "/tags/footjob/"]
-    
-    # MissAv 篩選關鍵字：只要包含其中任一個即符合
     target_genre_keywords = ["ol", "絲襪", "丝袜", "腳交", "脚交", "足交", "戀足", "恋足", "pantyhose", "footjob"]
 
     seen_urls = set()
@@ -430,35 +490,47 @@ async def run_scraper():
         try:
             browser = await p.chromium.launch(
                 headless=True,
-                args=["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-infobars"]
+                args=[
+                    "--disable-blink-features=AutomationControlled",
+                    "--no-sandbox",
+                    "--disable-infobars",
+                    "--disable-dev-shm-usage",
+                    "--lang=zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7"
+                ]
             )
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                 viewport={"width": 1920, "height": 1080},
-                locale="zh-TW"
+                locale="zh-TW",
+                timezone_id="Asia/Taipei"
             )
             page = await context.new_page()
 
             # ==========================================
+            # 0️⃣ Jable 首頁預熱 (獲取 cf_clearance 通行 Cookie)
+            # ==========================================
+            print("🌐 正在連線 Jable.tv 首頁預熱與建立連線憑證...")
+            await safe_navigate(page, "https://jable.tv/", is_category=False, max_retries=2)
+            await page.wait_for_timeout(3000)
+
+            # ==========================================
             # 1️⃣ 爬取 Jable.tv (前 2 頁)
             # ==========================================
-            print("🌐 開始掃描 Jable.tv...")
+            print("🌐 開始掃描 Jable.tv 清單頁...")
             for page_num in range(1, 3):
                 target_url = "https://jable.tv/categories/chinese-subtitle/" if page_num == 1 else f"https://jable.tv/categories/chinese-subtitle/{page_num}/"
                 print(f"正在掃描 Jable 第 {page_num}/2 頁: {target_url}")
 
-                nav_ok = await safe_navigate(page, target_url, is_category=True)
+                nav_ok = await safe_navigate(page, target_url, is_category=True, max_retries=2)
                 if not nav_ok:
                     print(f"  ❌ 無法進入 Jable 第 {page_num} 頁，跳過該頁")
                     continue
 
                 for _ in range(4):
                     await page.evaluate("window.scrollTo(0, document.body.scrollHeight);")
-                    await page.wait_for_timeout(1500)
+                    await page.wait_for_timeout(1000)
 
                 soup = BeautifulSoup(await page.content(), 'html.parser')
-                
-                # 雙重選擇器：優先抓 .video-img-box，若為 0 則抓取卡片容器
                 video_boxes = soup.select('.video-img-box')
                 if not video_boxes:
                     video_boxes = soup.select('div.col-6.col-sm-4.col-lg-3, div[class*="video-img-box"]')
@@ -472,8 +544,12 @@ async def run_scraper():
                         if full_url not in seen_urls:
                             seen_urls.add(full_url)
                             try:
-                                await safe_navigate(page, full_url, is_category=False)
+                                # 加入隨機微幅延遲，避免短時間過多請求觸發 Cloudflare
+                                await page.wait_for_timeout(random.randint(1200, 2500))
+                                
+                                await safe_navigate(page, full_url, is_category=False, max_retries=2)
                                 detail_soup = BeautifulSoup(await page.content(), 'html.parser')
+                                
                                 title_elem = detail_soup.select_one('h4') or detail_soup.select_one('h1') or detail_soup.find('title')
                                 video_title = title_elem.text.strip().replace(" - Jable.tv", "").strip() if title_elem else "未知標題"
 
@@ -515,7 +591,7 @@ async def run_scraper():
                 missav_url = "https://missav.ws/dm278/chinese-subtitle" if page_num == 1 else f"https://missav.ws/dm278/chinese-subtitle?page={page_num}"
                 print(f"正在掃描 MissAv 第 {page_num}/2 頁: {missav_url}")
 
-                nav_ok = await safe_navigate(page, missav_url, is_category=True)
+                nav_ok = await safe_navigate(page, missav_url, is_category=True, max_retries=2)
                 if not nav_ok:
                     print(f"  ❌ 無法進入 MissAv 第 {page_num} 頁，跳過該頁")
                     continue
@@ -526,7 +602,6 @@ async def run_scraper():
 
                 soup = BeautifulSoup(await page.content(), 'html.parser')
                 
-                # 收集包含標準番號特徵的影片連結
                 candidate_urls = []
                 for a in soup.find_all('a', href=True):
                     href = a.get('href', '').strip()
@@ -545,20 +620,20 @@ async def run_scraper():
 
                 for video_url in candidate_urls:
                     try:
-                        await safe_navigate(page, video_url, is_category=False)
+                        await page.wait_for_timeout(random.randint(1000, 2000))
+                        await safe_navigate(page, video_url, is_category=False, max_retries=2)
                         detail_soup = BeautifulSoup(await page.content(), 'html.parser')
                         
-                        # 排除頁首與頁尾的全站選單干擾
                         if detail_soup.find('header'):
                             detail_soup.find('header').decompose()
                         if detail_soup.find('footer'):
                             detail_soup.find('footer').decompose()
 
-                        # 1. 抓取標題
+                        # 1. 標題
                         title_elem = detail_soup.select_one('h1') or detail_soup.find('title')
                         video_title = title_elem.text.strip().replace(" - MissAV", "").replace(" - MissAV.com", "").strip() if title_elem else "未知標題"
 
-                        # 2. 抓取封面圖片
+                        # 2. 封面圖片
                         img_meta = detail_soup.select_one('meta[property="og:image"]') or detail_soup.select_one('meta[name="twitter:image"]')
                         cover_image_url = img_meta.get('content') if img_meta else ""
                         if not cover_image_url:
@@ -580,11 +655,10 @@ async def run_scraper():
                             genres_list = [g.text.strip() for g in genre_elems if g.text.strip()]
                             tags_str = ", ".join(list(dict.fromkeys(genres_list))) if genres_list else "一般"
 
-                        # 檢查「類型: 」後方的字串是否包含目標關鍵字
                         tags_lower = tags_str.lower()
                         has_genre_match = any(kw in tags_lower for kw in target_genre_keywords)
 
-                        # 輔助判定：比對 genres 標籤 slug
+                        # 輔助比對：避免無頭環境語系切換至英文 slug
                         if not has_genre_match:
                             for g in detail_soup.select('a[href*="/genres/"]'):
                                 g_href = g.get('href', '').lower()
