@@ -62,13 +62,14 @@ def save_video(title, cover_url, tags, actress, video_url):
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            INSERT INTO videos (title, cover_url, tags, actress, video_url)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO videos (title, cover_url, tags, actress, video_url, created_at)
+            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(video_url) DO UPDATE SET
                 title = excluded.title,
                 cover_url = CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE videos.cover_url END,
                 tags = CASE WHEN excluded.tags != '' AND excluded.tags != '一般' THEN excluded.tags ELSE videos.tags END,
-                actress = CASE WHEN excluded.actress != '' AND excluded.actress != '未知' THEN excluded.actress ELSE videos.actress END
+                actress = CASE WHEN excluded.actress != '' AND excluded.actress != '未知' THEN excluded.actress ELSE videos.actress END,
+                created_at = CURRENT_TIMESTAMP
         """, (title, cover_url, tags, actress, video_url))
         conn.commit()
         return cursor.rowcount > 0
@@ -78,7 +79,8 @@ def save_video(title, cover_url, tags, actress, video_url):
 def get_all_videos():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, title, cover_url, tags, actress, video_url, created_at FROM videos ORDER BY id ASC")
+    # 改為依照最新時間由新到舊排列
+    cursor.execute("SELECT id, title, cover_url, tags, actress, video_url, created_at FROM videos ORDER BY created_at DESC")
     rows = cursor.fetchall()
     conn.close()
     return rows
