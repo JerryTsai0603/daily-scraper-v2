@@ -1,0 +1,5 @@
+playwright
+playwright-stealth
+beautifulsoup4
+gspread
+google-auth

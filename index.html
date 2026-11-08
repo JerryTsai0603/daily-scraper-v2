@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jable 影片典藏庫 - 智慧篩選</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0b0f19; color: #f8fafc; padding: 24px 16px; }
+        .header { text-align: center; margin-bottom: 24px; }
+        .header h1 { font-size: 1.8rem; color: #38bdf8; margin-bottom: 6px; }
+        .header p { color: #94a3b8; font-size: 0.9rem; }
+        .filter-panel { max-width: 1400px; margin: 0 auto 28px auto; background: #1e293b; padding: 18px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; flex-direction: column; gap: 16px; }
+        .filter-row { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between; }
+        .filter-group { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; flex-grow: 1; }
+        .filter-item { display: flex; align-items: center; gap: 8px; }
+        .filter-item label { font-size: 0.85rem; color: #94a3b8; }
+        .filter-item select { background: #0f172a; border: 1px solid #334155; color: #f1f5f9; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; outline: none; }
+        .checkbox-container { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; background: #0f172a; padding: 10px 14px; border-radius: 6px; border: 1px solid #334155; max-height: 140px; overflow-y: auto; flex-grow: 1; }
+        .checkbox-label { font-size: 0.85rem; color: #cbd5e1; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+        .checkbox-label input { cursor: pointer; }
+        .reset-btn { background: #475569; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+        .reset-btn:hover { background: #64748b; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; max-width: 1400px; margin: 0 auto; }
+        .card { background: #1e293b; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); display: flex; flex-direction: column; transition: transform 0.2s; }
+        .card:hover { transform: translateY(-4px); }
+        .card img { width: 100%; height: 180px; object-fit: cover; background-color: #334155; }
+        .card-body { padding: 14px; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; }
+        .title { font-size: 0.95rem; font-weight: 600; line-height: 1.4; color: #f1f5f9; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 8px; }
+        .meta-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 0.75rem; }
+        .actress-badge { background: #0284c7; color: white; padding: 2px 8px; border-radius: 4px; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .date { color: #64748b; }
+        .tags { font-size: 0.75rem; color: #94a3b8; background: #0f172a; padding: 4px 8px; border-radius: 4px; margin-bottom: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .footer { display: flex; justify-content: flex-end; margin-top: auto; }
+        .btn { background: #0284c7; color: #fff; text-decoration: none; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; font-weight: 500; }
+        .btn:hover { background: #0369a1; }
+        .empty-msg { text-align: center; grid-column: 1 / -1; color: #94a3b8; padding: 40px; font-size: 1rem; display: none; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Jable 影片自動典藏庫</h1>
+        <p>目前庫存 <span id="total-count">67</span> 部影片 | 篩選顯示 <span id="visible-count">67</span> 部</p>
+    </div>
+    <div class="filter-panel">
+        <div class="filter-row">
+            <div class="filter-group">
+                <div class="filter-item" style="width: 100%;">
+                    <label style="min-width: 80px;">Tags 複選:</label>
+                    <div class="checkbox-container">
+                        <label class="checkbox-label"><input type="checkbox" name="keyword" value="3P"> 3P</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="Cosplay"> Cosplay</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="NTR"> NTR</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="OL"> OL</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="下雨天"> 下雨天</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="中出"> 中出</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="中文字幕"> 中文字幕</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="主奴調教"> 主奴調教</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="主播"> 主播</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="乳交"> 乳交</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="人妻"> 人妻</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="健身房"> 健身房</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="凌辱"> 凌辱</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="凌辱快感"> 凌辱快感</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="出軌"> 出軌</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="制服誘惑"> 制服誘惑</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="口交"> 口交</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="口爆"> 口爆</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="吊帶襪"> 吊帶襪</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="和服"> 和服</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="圖書館"> 圖書館</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="多P"> 多P</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="多P群交"> 多P群交</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="女僕"> 女僕</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="媚藥"> 媚藥</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="學校"> 學校</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="少女"> 少女</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="巨乳"> 巨乳</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="廁所"> 廁所</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="按摩"> 按摩</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="接吻"> 接吻</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="旗袍"> 旗袍</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="時間停止"> 時間停止</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="校服"> 校服</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="水着"> 水着</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="泡姬"> 泡姬</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="泥醉"> 泥醉</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="泳池"> 泳池</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="溫泉"> 溫泉</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="漁網"> 漁網</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="潮吹"> 潮吹</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="熟女"> 熟女</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="獸耳"> 獸耳</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="男M"> 男M</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="男友視角"> 男友視角</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="痙攣"> 痙攣</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="痴女"> 痴女</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="痴漢"> 痴漢</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="白虎"> 白虎</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="監獄"> 監獄</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="直接開啪"> 直接開啪</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="眼鏡娘"> 眼鏡娘</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="短髮"> 短髮</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="絲襪"> 絲襪</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="絲襪美腿"> 絲襪美腿</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="綑綁"> 綑綁</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="美尻"> 美尻</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="美腿"> 美腿</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="老師"> 老師</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="腳交"> 腳交</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="處女作/引退作"> 處女作/引退作</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="角色劇情"> 角色劇情</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="誘惑"> 誘惑</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="調教"> 調教</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="護士"> 護士</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="軟體"> 軟體</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="進犯"> 進犯</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="過膝襪"> 過膝襪</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="醫生"> 醫生</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="錄像"> 錄像</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="錯過末班車"> 錯過末班車</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="長身"> 長身</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="集團進犯"> 集團進犯</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="電車"> 電車</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="露出"> 露出</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="顏射"> 顏射</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="風俗娘"> 風俗娘</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="黑絲"> 黑絲</label><label class="checkbox-label"><input type="checkbox" name="keyword" value="黑肉"> 黑肉</label>
+                    </div>
+                </div>
+            </div>
+            <button class="reset-btn" onclick="resetFilters()">重設條件</button>
+        </div>
+        <div class="filter-row">
+            <div class="filter-group">
+                <div class="filter-item">
+                    <label for="actress-select">女優篩選:</label>
+                    <select id="actress-select">
+                        <option value="">全部女優</option>
+                        <option value="三雲彩葉">三雲彩葉</option><option value="中山文香">中山文香</option><option value="五日市芽依">五日市芽依</option><option value="伊藤舞雪">伊藤舞雪</option><option value="初美菜乃花">初美菜乃花</option><option value="加藤綾乃">加藤綾乃</option><option value="吹石玲奈">吹石玲奈</option><option value="坂井美櫻">坂井美櫻</option><option value="夏生夏">夏生夏</option><option value="夏目玲香">夏目玲香</option><option value="大島優香">大島優香</option><option value="奥井千晴">奥井千晴</option><option value="奥田咲">奥田咲</option><option value="女神純">女神純</option><option value="妃光莉">妃光莉</option><option value="宍戶里帆">宍戶里帆</option><option value="小泉玖美">小泉玖美</option><option value="小野六花">小野六花</option><option value="小野梨花">小野梨花</option><option value="川越仁子">川越仁子</option><option value="幸村泉希">幸村泉希</option><option value="彩月七緒">彩月七緒</option><option value="新井里真">新井里真</option><option value="星冬香">星冬香</option><option value="星空音琉">星空音琉</option><option value="春日日音">春日日音</option><option value="春陽萌花">春陽萌花</option><option value="朝比奈紗良">朝比奈紗良</option><option value="木下日葵">木下日葵</option><option value="木村愛心">木村愛心</option><option value="木村玲衣">木村玲衣</option><option value="東條夏">東條夏</option><option value="栗山莉緒">栗山莉緒</option><option value="楪可憐">楪可憐</option><option value="櫻坂風花">櫻坂風花</option><option value="櫻空桃">櫻空桃</option><option value="永峰椿">永峰椿</option><option value="流川莉央">流川莉央</option><option value="海老咲碧">海老咲碧</option><option value="渡部穗乃">渡部穗乃</option><option value="田村香奈">田村香奈</option><option value="田野憂">田野憂</option><option value="白石茉莉奈">白石茉莉奈</option><option value="百田光稀">百田光稀</option><option value="皆瀨明里">皆瀨明里</option><option value="神喜美亞">神喜美亞</option><option value="笹倉彩">笹倉彩</option><option value="純白彩永">純白彩永</option><option value="結城莉乃">結城莉乃</option><option value="美乃雀">美乃雀</option><option value="羽月乃蒼">羽月乃蒼</option><option value="花吹詩音">花吹詩音</option><option value="花咲由羅">花咲由羅</option><option value="葉月真由">葉月真由</option><option value="葵伊吹">葵伊吹</option><option value="藤環奈">藤環奈</option><option value="西宮夢">西宮夢</option><option value="逢澤美優">逢澤美優</option><option value="釋愛麗絲">釋愛麗絲</option><option value="鈴之家鈴">鈴之家鈴</option><option value="鈴村愛里">鈴村愛里</option><option value="長濱蜜璃">長濱蜜璃</option><option value="響蓮">響蓮</option><option value="風間由美">風間由美</option><option value="鷲尾芽衣">鷲尾芽衣</option>
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label for="date-sort">新增時間排序:</label>
+                    <select id="date-sort">
+                        <option value="newest">最新優先</option>
+                        <option value="oldest">較舊優先</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="grid" id="video-grid">
+        
+        <div class="card" data-title="miab-677 dream woman vol.101 逢澤美優" data-actress="逢澤美優" data-tags="中文字幕, 絲襪美腿, 直接開啪, 多p群交, 制服誘惑, 吊帶襪, 口交, 漁網, 多p, 校服, 黑絲, 美腿, 口爆, 絲襪, 顏射, 少女" data-date="2026-11-06">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/63000/63127/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="MIAB-677 DREAM WOMAN Vol.101 逢澤美優">MIAB-677 DREAM WOMAN Vol.101 逢澤美優</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 逢澤美優</span>
+                    <span class="date">📅 2026-11-06</span>
+                </div>
+                <div class="tags" title="中文字幕, 絲襪美腿, 直接開啪, 多P群交, 制服誘惑, 吊帶襪, 口交, 漁網, 多P, 校服, 黑絲, 美腿, 口爆, 絲襪, 顏射, 少女">🏷️ 中文字幕, 絲襪美腿, 直接開啪, 多P群交, 制服誘惑, 吊帶襪, 口交, 漁網, 多P, 校服, 黑絲, 美腿, 口爆, 絲襪, 顏射, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/miab-677/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="abf-389 毒舌女醫生把沒有用的男人狠狠教育一頓的診療室 鈴村愛里" data-actress="鈴村愛里" data-tags="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 醫生, 腳交, 吊帶襪, 美尻, 美腿, 絲襪, 顏射, 少女" data-date="2026-11-04">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/63000/63071/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="ABF-389 毒舌女醫生把沒有用的男人狠狠教育一頓的診療室 鈴村愛里">ABF-389 毒舌女醫生把沒有用的男人狠狠教育一頓的診療室 鈴村愛里</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 鈴村愛里</span>
+                    <span class="date">📅 2026-11-04</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 醫生, 腳交, 吊帶襪, 美尻, 美腿, 絲襪, 顏射, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 醫生, 腳交, 吊帶襪, 美尻, 美腿, 絲襪, 顏射, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/abf-389/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="dsod-077 無劇本、無編排、無演技！美巨乳正妹完全憑本能沉溺於快感的1對1 逢澤美優" data-actress="逢澤美優" data-tags="中文字幕, 絲襪美腿, 直接開啪, 少女, 潮吹, 黑絲, 美腿, 絲襪, 顏射, 中出" data-date="2026-11-04">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/63000/63078/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="DSOD-077 無劇本、無編排、無演技！美巨乳正妹完全憑本能沉溺於快感的1對1 逢澤美優">DSOD-077 無劇本、無編排、無演技！美巨乳正妹完全憑本能沉溺於快感的1對1 逢澤美優</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 逢澤美優</span>
+                    <span class="date">📅 2026-11-04</span>
+                </div>
+                <div class="tags" title="中文字幕, 絲襪美腿, 直接開啪, 少女, 潮吹, 黑絲, 美腿, 絲襪, 顏射, 中出">🏷️ 中文字幕, 絲襪美腿, 直接開啪, 少女, 潮吹, 黑絲, 美腿, 絲襪, 顏射, 中出</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/dsod-077/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="hmn-894 硬邦邦肉棒立刻搾精！用力插小穴中出可愛女護士 因為太硬妨礙治療，被規定每天內射10發的住院生活。 東條夏" data-actress="東條夏" data-tags="中文字幕, 角色劇情, 絲襪美腿, 男友視角, 制服誘惑, 護士, 吊帶襪, 漁網, 黑絲, 美腿, 絲襪, 顏射, 中出, 少女" data-date="2026-11-04">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/63000/63104/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="HMN-894 硬邦邦肉棒立刻搾精！用力插小穴中出可愛女護士 因為太硬妨礙治療，被規定每天內射10發的住院生活。 東條夏">HMN-894 硬邦邦肉棒立刻搾精！用力插小穴中出可愛女護士 因為太硬妨礙治療，被規定每天內射10發的住院生活。 東條夏</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 東條夏</span>
+                    <span class="date">📅 2026-11-04</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 男友視角, 制服誘惑, 護士, 吊帶襪, 漁網, 黑絲, 美腿, 絲襪, 顏射, 中出, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 男友視角, 制服誘惑, 護士, 吊帶襪, 漁網, 黑絲, 美腿, 絲襪, 顏射, 中出, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/hmn-894/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="pred-899 同學會ntr 失去聯繫的一夜，背著我與超契合的前男友偷情內射的可愛美乳人妻 幸村泉希" data-actress="幸村泉希" data-tags="中文字幕, 角色劇情, 絲襪美腿, ntr, 黑絲, 美腿, 絲襪, 人妻, 中出, 少女" data-date="2026-11-01">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62969/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="PRED-899 同學會NTR 失去聯繫的一夜，背著我與超契合的前男友偷情內射的可愛美乳人妻 幸村泉希">PRED-899 同學會NTR 失去聯繫的一夜，背著我與超契合的前男友偷情內射的可愛美乳人妻 幸村泉希</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 幸村泉希</span>
+                    <span class="date">📅 2026-11-01</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, NTR, 黑絲, 美腿, 絲襪, 人妻, 中出, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, NTR, 黑絲, 美腿, 絲襪, 人妻, 中出, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/pred-899/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="snos-398 剛派遣來，重視紀律、道德與秩序的家長會鷲尾小姐，嚴格過頭而且超巨乳、總之超色。 鷲尾芽衣" data-actress="鷲尾芽衣" data-tags="中文字幕, 制服誘惑, 絲襪美腿, 角色劇情, 少女, 巨乳, 絲襪, 美腿, 乳交, ol, 眼鏡娘, 學校, 水着, 老師, 泳池" data-date="2026-11-01">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62998/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="SNOS-398 剛派遣來，重視紀律、道德與秩序的家長會鷲尾小姐，嚴格過頭而且超巨乳、總之超色。 鷲尾芽衣">SNOS-398 剛派遣來，重視紀律、道德與秩序的家長會鷲尾小姐，嚴格過頭而且超巨乳、總之超色。 鷲尾芽衣</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 鷲尾芽衣</span>
+                    <span class="date">📅 2026-11-01</span>
+                </div>
+                <div class="tags" title="中文字幕, 制服誘惑, 絲襪美腿, 角色劇情, 少女, 巨乳, 絲襪, 美腿, 乳交, OL, 眼鏡娘, 學校, 水着, 老師, 泳池">🏷️ 中文字幕, 制服誘惑, 絲襪美腿, 角色劇情, 少女, 巨乳, 絲襪, 美腿, 乳交, OL, 眼鏡娘, 學校, 水着, 老師, 泳池</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/snos-398/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="cjod-521 一醒來發現身旁竟是穿著內衣的後輩巨乳辣妹！？被萌花揉捏奶頭，多次玩弄的我 春陽萌花" data-actress="春陽萌花" data-tags="中文字幕, 角色劇情, 男友視角, 痴女, 腳交, 短髮, 巨乳, 中出, 少女" data-date="2026-11-01">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/63000/63000/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="CJOD-521 一醒來發現身旁竟是穿著內衣的後輩巨乳辣妹！？被萌花揉捏奶頭，多次玩弄的我 春陽萌花">CJOD-521 一醒來發現身旁竟是穿著內衣的後輩巨乳辣妹！？被萌花揉捏奶頭，多次玩弄的我 春陽萌花</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 春陽萌花</span>
+                    <span class="date">📅 2026-11-01</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 男友視角, 痴女, 腳交, 短髮, 巨乳, 中出, 少女">🏷️ 中文字幕, 角色劇情, 男友視角, 痴女, 腳交, 短髮, 巨乳, 中出, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/cjod-521/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="cjod-537 令和no.1 口水流不停的舌吻巨乳辣妹！ 絕品身材色情伺候 無限制射精泡泡浴榨乾20發套餐 新井里真" data-actress="新井里真" data-tags="中文字幕, 男友視角, 角色劇情, 絲襪美腿, 少女, 中出, 巨乳, 潮吹, 接吻, 泡姬, 風俗娘, 絲襪, 美腿, 黑絲, 吊帶襪" data-date="2026-11-01">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/63000/63002/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="CJOD-537 令和No.1 口水流不停的舌吻巨乳辣妹！ 絕品身材色情伺候 無限制射精泡泡浴榨乾20發套餐 新井里真">CJOD-537 令和No.1 口水流不停的舌吻巨乳辣妹！ 絕品身材色情伺候 無限制射精泡泡浴榨乾20發套餐 新井里真</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 新井里真</span>
+                    <span class="date">📅 2026-11-01</span>
+                </div>
+                <div class="tags" title="中文字幕, 男友視角, 角色劇情, 絲襪美腿, 少女, 中出, 巨乳, 潮吹, 接吻, 泡姬, 風俗娘, 絲襪, 美腿, 黑絲, 吊帶襪">🏷️ 中文字幕, 男友視角, 角色劇情, 絲襪美腿, 少女, 中出, 巨乳, 潮吹, 接吻, 泡姬, 風俗娘, 絲襪, 美腿, 黑絲, 吊帶襪</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/cjod-537/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="cjod-538 「因為是巨乳阿姨所以超色情喔」和肉慾大發的爆乳美魔女肉彈交合，沉迷和乾媽爆射體內不倫的我 吹石玲奈" data-actress="吹石玲奈" data-tags="中文字幕, 絲襪美腿, 角色劇情, 中出, 巨乳, 人妻, 絲襪, 出軌, 美腿, 黑絲, 熟女, 吊帶襪, 黑肉" data-date="2026-11-01">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/63000/63003/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="CJOD-538 「因為是巨乳阿姨所以超色情喔」和肉慾大發的爆乳美魔女肉彈交合，沉迷和乾媽爆射體內不倫的我 吹石玲奈">CJOD-538 「因為是巨乳阿姨所以超色情喔」和肉慾大發的爆乳美魔女肉彈交合，沉迷和乾媽爆射體內不倫的我 吹石玲奈</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 吹石玲奈</span>
+                    <span class="date">📅 2026-11-01</span>
+                </div>
+                <div class="tags" title="中文字幕, 絲襪美腿, 角色劇情, 中出, 巨乳, 人妻, 絲襪, 出軌, 美腿, 黑絲, 熟女, 吊帶襪, 黑肉">🏷️ 中文字幕, 絲襪美腿, 角色劇情, 中出, 巨乳, 人妻, 絲襪, 出軌, 美腿, 黑絲, 熟女, 吊帶襪, 黑肉</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/cjod-538/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="cjod-548 色色姐姐痴女內射ok的回春亞洲男性按摩院 釋愛麗絲" data-actress="釋愛麗絲" data-tags="中文字幕, 男友視角, 絲襪美腿, 角色劇情, 少女, 中出, 絲襪, 口爆, 美腿, 痴女, 美尻, 按摩, 腳交, 長身" data-date="2026-11-01">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/63000/63004/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="CJOD-548 色色姐姐痴女內射OK的回春亞洲男性按摩院 釋愛麗絲">CJOD-548 色色姐姐痴女內射OK的回春亞洲男性按摩院 釋愛麗絲</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 釋愛麗絲</span>
+                    <span class="date">📅 2026-11-01</span>
+                </div>
+                <div class="tags" title="中文字幕, 男友視角, 絲襪美腿, 角色劇情, 少女, 中出, 絲襪, 口爆, 美腿, 痴女, 美尻, 按摩, 腳交, 長身">🏷️ 中文字幕, 男友視角, 絲襪美腿, 角色劇情, 少女, 中出, 絲襪, 口爆, 美腿, 痴女, 美尻, 按摩, 腳交, 長身</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/cjod-548/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="dldss-554 飢渴難耐的公司總裁夫人偷偷溜進中年男子的清潔工房間房間裡瀰漫著汗臭和油膩的氣味 春日日音" data-actress="春日日音" data-tags="中文字幕, 制服誘惑, 絲襪美腿, 角色劇情, 中出, 巨乳, 人妻, 絲襪, 出軌, 3p, 美腿, 熟女, ol" data-date="2026-11-01">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/63000/63008/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="DLDSS-554 飢渴難耐的公司總裁夫人偷偷溜進中年男子的清潔工房間房間裡瀰漫著汗臭和油膩的氣味 春日日音">DLDSS-554 飢渴難耐的公司總裁夫人偷偷溜進中年男子的清潔工房間房間裡瀰漫著汗臭和油膩的氣味 春日日音</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 春日日音</span>
+                    <span class="date">📅 2026-11-01</span>
+                </div>
+                <div class="tags" title="中文字幕, 制服誘惑, 絲襪美腿, 角色劇情, 中出, 巨乳, 人妻, 絲襪, 出軌, 3P, 美腿, 熟女, OL">🏷️ 中文字幕, 制服誘惑, 絲襪美腿, 角色劇情, 中出, 巨乳, 人妻, 絲襪, 出軌, 3P, 美腿, 熟女, OL</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/dldss-554/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="pppe-441 爆乳完全露出的淫蕩服裝＋淫語乳交，把蛋蛋復活引導到射精的巨乳痴女回春按摩 中山文香" data-actress="中山文香" data-tags="中文字幕, 角色劇情, 絲襪美腿, 漁網, 痴女, 黑絲, 乳交, 美腿, 絲襪, 巨乳, 中出, 少女" data-date="2026-10-30">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62964/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="PPPE-441 爆乳完全露出的淫蕩服裝＋淫語乳交，把蛋蛋復活引導到射精的巨乳痴女回春按摩 中山文香">PPPE-441 爆乳完全露出的淫蕩服裝＋淫語乳交，把蛋蛋復活引導到射精的巨乳痴女回春按摩 中山文香</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 中山文香</span>
+                    <span class="date">📅 2026-10-30</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 漁網, 痴女, 黑絲, 乳交, 美腿, 絲襪, 巨乳, 中出, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 漁網, 痴女, 黑絲, 乳交, 美腿, 絲襪, 巨乳, 中出, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/pppe-441/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="pred-890 【自慰專用】【超特寫長鏡頭】【極致猥褻視角】為了自慰，濃縮拍攝極致性感巨乳身材的連續內射性愛紀錄 楪可憐" data-actress="楪可憐" data-tags="中文字幕, 直接開啪, 絲襪美腿, 腳交, 潮吹, 黑絲, 乳交, 美腿, 絲襪, 巨乳, 中出, 少女" data-date="2026-10-30">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62967/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="PRED-890 【自慰專用】【超特寫長鏡頭】【極致猥褻視角】為了自慰，濃縮拍攝極致性感巨乳身材的連續內射性愛紀錄 楪可憐">PRED-890 【自慰專用】【超特寫長鏡頭】【極致猥褻視角】為了自慰，濃縮拍攝極致性感巨乳身材的連續內射性愛紀錄 楪可憐</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 楪可憐</span>
+                    <span class="date">📅 2026-10-30</span>
+                </div>
+                <div class="tags" title="中文字幕, 直接開啪, 絲襪美腿, 腳交, 潮吹, 黑絲, 乳交, 美腿, 絲襪, 巨乳, 中出, 少女">🏷️ 中文字幕, 直接開啪, 絲襪美腿, 腳交, 潮吹, 黑絲, 乳交, 美腿, 絲襪, 巨乳, 中出, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/pred-890/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="pred-898 大叔客人也精力絕倫勃起硬邦邦！舌吻到肉棒變傻瓜的 ptom！穿著羞恥服裝全力伺候的噴潮內射按摩 田村香奈" data-actress="田村香奈" data-tags="中文字幕, 角色劇情, 絲襪美腿, 男友視角, 腳交, 按摩, 接吻, 黑絲, 美腿, 絲襪, 中出, 少女" data-date="2026-10-30">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62968/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="PRED-898 大叔客人也精力絕倫勃起硬邦邦！舌吻到肉棒變傻瓜的 PtoM！穿著羞恥服裝全力伺候的噴潮內射按摩 田村香奈">PRED-898 大叔客人也精力絕倫勃起硬邦邦！舌吻到肉棒變傻瓜的 PtoM！穿著羞恥服裝全力伺候的噴潮內射按摩 田村香奈</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 田村香奈</span>
+                    <span class="date">📅 2026-10-30</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 男友視角, 腳交, 按摩, 接吻, 黑絲, 美腿, 絲襪, 中出, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 男友視角, 腳交, 按摩, 接吻, 黑絲, 美腿, 絲襪, 中出, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/pred-898/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="dsod-045 出差大暴雨，美巨乳ol意外在討厭的上司面前喝醉了，不得不同睡一房，天亮之前，我們口水混在一起、滿身大汗瘋狂內射。 栗山莉緒" data-actress="栗山莉緒" data-tags="中文字幕, 制服誘惑, 絲襪美腿, 角色劇情, 中出, 絲襪, 口爆, 美腿, 黑絲, 凌辱, ol, 下雨天" data-date="2026-10-29">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62951/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="DSOD-045 出差大暴雨，美巨乳OL意外在討厭的上司面前喝醉了，不得不同睡一房，天亮之前，我們口水混在一起、滿身大汗瘋狂內射。 栗山莉緒">DSOD-045 出差大暴雨，美巨乳OL意外在討厭的上司面前喝醉了，不得不同睡一房，天亮之前，我們口水混在一起、滿身大汗瘋狂內射。 栗山莉緒</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 栗山莉緒</span>
+                    <span class="date">📅 2026-10-29</span>
+                </div>
+                <div class="tags" title="中文字幕, 制服誘惑, 絲襪美腿, 角色劇情, 中出, 絲襪, 口爆, 美腿, 黑絲, 凌辱, OL, 下雨天">🏷️ 中文字幕, 制服誘惑, 絲襪美腿, 角色劇情, 中出, 絲襪, 口爆, 美腿, 黑絲, 凌辱, OL, 下雨天</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/dsod-045/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="jur-865 只有班長的我才知道…學生指導巨乳女老師的秘密。 放學後和學校最認真的女老師一起在校園淫蕩玩耍。 木村玲衣" data-actress="木村玲衣" data-tags="中文字幕, 絲襪美腿, 角色劇情, 制服誘惑, 中出, 巨乳, 絲襪, 美腿, 黑絲, 熟女, 吊帶襪, 錄像, 眼鏡娘, 學校, 長身, 老師, 露出, 圖書館" data-date="2026-10-29">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62962/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="JUR-865 只有班長的我才知道…學生指導巨乳女老師的秘密。 放學後和學校最認真的女老師一起在校園淫蕩玩耍。 木村玲衣">JUR-865 只有班長的我才知道…學生指導巨乳女老師的秘密。 放學後和學校最認真的女老師一起在校園淫蕩玩耍。 木村玲衣</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 木村玲衣</span>
+                    <span class="date">📅 2026-10-29</span>
+                </div>
+                <div class="tags" title="中文字幕, 絲襪美腿, 角色劇情, 制服誘惑, 中出, 巨乳, 絲襪, 美腿, 黑絲, 熟女, 吊帶襪, 錄像, 眼鏡娘, 學校, 長身, 老師, 露出, 圖書館">🏷️ 中文字幕, 絲襪美腿, 角色劇情, 制服誘惑, 中出, 巨乳, 絲襪, 美腿, 黑絲, 熟女, 吊帶襪, 錄像, 眼鏡娘, 學校, 長身, 老師, 露出, 圖書館</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/jur-865/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="bony-207 拔不出來的連續噴發，巨乳美人小穴裡面瘋狂攪拌！！小穴容量徹底超載的無限制內射 妃光莉" data-actress="妃光莉" data-tags="中文字幕, 男友視角, 絲襪美腿, 直接開啪, 口爆, 巨乳, 水着, 熟女, 黑絲, 美腿, 絲襪, 人妻, 中出" data-date="2026-10-28">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62910/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="BONY-207 拔不出來的連續噴發，巨乳美人小穴裡面瘋狂攪拌！！小穴容量徹底超載的無限制內射 妃光莉">BONY-207 拔不出來的連續噴發，巨乳美人小穴裡面瘋狂攪拌！！小穴容量徹底超載的無限制內射 妃光莉</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 妃光莉</span>
+                    <span class="date">📅 2026-10-28</span>
+                </div>
+                <div class="tags" title="中文字幕, 男友視角, 絲襪美腿, 直接開啪, 口爆, 巨乳, 水着, 熟女, 黑絲, 美腿, 絲襪, 人妻, 中出">🏷️ 中文字幕, 男友視角, 絲襪美腿, 直接開啪, 口爆, 巨乳, 水着, 熟女, 黑絲, 美腿, 絲襪, 人妻, 中出</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/bony-207/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="dldss-529 電擊移籍 dahlia 小泉玖美 41歲 從人妻變身女優。那位「真實人妻」來了！ 小泉玖美" data-actress="小泉玖美" data-tags="中文字幕, 絲襪美腿, 直接開啪, 漁網, 潮吹, 熟女, 美腿, 3p, 短髮, 絲襪, 人妻, 顏射" data-date="2026-10-28">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62911/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="DLDSS-529 電擊移籍 DAHLIA 小泉玖美 41歲 從人妻變身女優。那位「真實人妻」來了！ 小泉玖美">DLDSS-529 電擊移籍 DAHLIA 小泉玖美 41歲 從人妻變身女優。那位「真實人妻」來了！ 小泉玖美</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 小泉玖美</span>
+                    <span class="date">📅 2026-10-28</span>
+                </div>
+                <div class="tags" title="中文字幕, 絲襪美腿, 直接開啪, 漁網, 潮吹, 熟女, 美腿, 3P, 短髮, 絲襪, 人妻, 顏射">🏷️ 中文字幕, 絲襪美腿, 直接開啪, 漁網, 潮吹, 熟女, 美腿, 3P, 短髮, 絲襪, 人妻, 顏射</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/dldss-529/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="dldss-531 dahlia電擊移籍 巨乳女優降臨重生。 女神純" data-actress="女神純" data-tags="中文字幕, 絲襪美腿, 直接開啪, 潮吹, 黑絲, 美腿, 3p, 絲襪, 人妻, 顏射, 巨乳, 少女" data-date="2026-10-28">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62912/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="DLDSS-531 DAHLIA電擊移籍 巨乳女優降臨重生。 女神純">DLDSS-531 DAHLIA電擊移籍 巨乳女優降臨重生。 女神純</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 女神純</span>
+                    <span class="date">📅 2026-10-28</span>
+                </div>
+                <div class="tags" title="中文字幕, 絲襪美腿, 直接開啪, 潮吹, 黑絲, 美腿, 3P, 絲襪, 人妻, 顏射, 巨乳, 少女">🏷️ 中文字幕, 絲襪美腿, 直接開啪, 潮吹, 黑絲, 美腿, 3P, 絲襪, 人妻, 顏射, 巨乳, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/dldss-531/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="same-237 巨乳ol被公司最討厭的男人幹，那種挺腰抽插的感覺卻忘也忘不了… 葉月真由" data-actress="葉月真由" data-tags="中文字幕, 角色劇情, 絲襪美腿, 凌辱快感, 進犯, 凌辱, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女" data-date="2026-10-28">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62919/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="SAME-237 巨乳OL被公司最討厭的男人幹，那種挺腰抽插的感覺卻忘也忘不了… 葉月真由">SAME-237 巨乳OL被公司最討厭的男人幹，那種挺腰抽插的感覺卻忘也忘不了… 葉月真由</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 葉月真由</span>
+                    <span class="date">📅 2026-10-28</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 凌辱快感, 進犯, 凌辱, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 凌辱快感, 進犯, 凌辱, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/same-237/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="snos-444 170cm g罩杯巨乳‘社會新鮮人’av女優、新鮮小穴大痙攣—職場人士最棒的女子潮吹、身體後仰、人生第一次的大絕頂高潮 星空音琉" data-actress="星空音琉" data-tags="中文字幕, 絲襪美腿, 直接開啪, 顏射, 長身, 媚藥, ol, 潮吹, 黑絲, 美腿, 3p, 絲襪, 巨乳, 少女, 痙攣" data-date="2026-10-28">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62922/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="SNOS-444 170cm G罩杯巨乳‘社會新鮮人’AV女優、新鮮小穴大痙攣—職場人士最棒的女子潮吹、身體後仰、人生第一次的大絕頂高潮 星空音琉">SNOS-444 170cm G罩杯巨乳‘社會新鮮人’AV女優、新鮮小穴大痙攣—職場人士最棒的女子潮吹、身體後仰、人生第一次的大絕頂高潮 星空音琉</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 星空音琉</span>
+                    <span class="date">📅 2026-10-28</span>
+                </div>
+                <div class="tags" title="中文字幕, 絲襪美腿, 直接開啪, 顏射, 長身, 媚藥, OL, 潮吹, 黑絲, 美腿, 3P, 絲襪, 巨乳, 少女, 痙攣">🏷️ 中文字幕, 絲襪美腿, 直接開啪, 顏射, 長身, 媚藥, OL, 潮吹, 黑絲, 美腿, 3P, 絲襪, 巨乳, 少女, 痙攣</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/snos-444/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="jur-863 女友的巨乳媽媽性慾超強，根本就是我的菜！瞞著女友，把硬硬的雞雞獻給她無數次… 加藤綾乃" data-actress="加藤綾乃" data-tags="中文字幕, 絲襪美腿, 角色劇情, 中出, 人妻, 絲襪, 出軌, 口爆, 美腿, 黑絲, 熟女, 接吻, 腳交" data-date="2026-10-26">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62830/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="JUR-863 女友的巨乳媽媽性慾超強，根本就是我的菜！瞞著女友，把硬硬的雞雞獻給她無數次… 加藤綾乃">JUR-863 女友的巨乳媽媽性慾超強，根本就是我的菜！瞞著女友，把硬硬的雞雞獻給她無數次… 加藤綾乃</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 加藤綾乃</span>
+                    <span class="date">📅 2026-10-26</span>
+                </div>
+                <div class="tags" title="中文字幕, 絲襪美腿, 角色劇情, 中出, 人妻, 絲襪, 出軌, 口爆, 美腿, 黑絲, 熟女, 接吻, 腳交">🏷️ 中文字幕, 絲襪美腿, 角色劇情, 中出, 人妻, 絲襪, 出軌, 口爆, 美腿, 黑絲, 熟女, 接吻, 腳交</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/jur-863/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="hmn-907 陷入上司的陷阱、在醉倒的男友身旁被昏迷集體強● 被幹到高潮和大量內射，沉淪於快感之中的纖細美乳女主播 朝比奈紗良" data-actress="朝比奈紗良" data-tags="中文字幕, 角色劇情, 絲襪美腿, 多p群交, 凌辱快感, 主播, 集團進犯, 錄像, 進犯, 多p, 凌辱, 美腿, 短髮, 絲襪, 中出, 少女" data-date="2026-10-25">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62804/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="HMN-907 陷入上司的陷阱、在醉倒的男友身旁被昏迷集體強● 被幹到高潮和大量內射，沉淪於快感之中的纖細美乳女主播 朝比奈紗良">HMN-907 陷入上司的陷阱、在醉倒的男友身旁被昏迷集體強● 被幹到高潮和大量內射，沉淪於快感之中的纖細美乳女主播 朝比奈紗良</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 朝比奈紗良</span>
+                    <span class="date">📅 2026-10-25</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 多P群交, 凌辱快感, 主播, 集團進犯, 錄像, 進犯, 多P, 凌辱, 美腿, 短髮, 絲襪, 中出, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 多P群交, 凌辱快感, 主播, 集團進犯, 錄像, 進犯, 多P, 凌辱, 美腿, 短髮, 絲襪, 中出, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/hmn-907/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="snos-344 錯過末班車前來過夜的女友妹妹 晃著j罩杯的巨乳與纖細美腿 用盡各種手段獵取我的雞雞… 渡部穗乃" data-actress="渡部穗乃" data-tags="中文字幕, 男友視角, 角色劇情, 制服誘惑, 腳交, 誘惑, 出軌, 錯過末班車, 校服, 乳交, 顏射, 巨乳, 少女" data-date="2026-10-25">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62819/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="SNOS-344 錯過末班車前來過夜的女友妹妹 晃著J罩杯的巨乳與纖細美腿 用盡各種手段獵取我的雞雞… 渡部穗乃">SNOS-344 錯過末班車前來過夜的女友妹妹 晃著J罩杯的巨乳與纖細美腿 用盡各種手段獵取我的雞雞… 渡部穗乃</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 渡部穗乃</span>
+                    <span class="date">📅 2026-10-25</span>
+                </div>
+                <div class="tags" title="中文字幕, 男友視角, 角色劇情, 制服誘惑, 腳交, 誘惑, 出軌, 錯過末班車, 校服, 乳交, 顏射, 巨乳, 少女">🏷️ 中文字幕, 男友視角, 角色劇情, 制服誘惑, 腳交, 誘惑, 出軌, 錯過末班車, 校服, 乳交, 顏射, 巨乳, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/snos-344/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="ipzz-902 digital channel dc145 巨乳美人顏射解禁 長濱蜜璃" data-actress="長濱蜜璃" data-tags="中文字幕, 直接開啪, 多p群交, 主奴調教, 監獄, 多p, 調教, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女" data-date="2026-10-24">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62811/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="IPZZ-902 DIGITAL CHANNEL DC145 巨乳美人顏射解禁 長濱蜜璃">IPZZ-902 DIGITAL CHANNEL DC145 巨乳美人顏射解禁 長濱蜜璃</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 長濱蜜璃</span>
+                    <span class="date">📅 2026-10-24</span>
+                </div>
+                <div class="tags" title="中文字幕, 直接開啪, 多P群交, 主奴調教, 監獄, 多P, 調教, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女">🏷️ 中文字幕, 直接開啪, 多P群交, 主奴調教, 監獄, 多P, 調教, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/ipzz-902/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="ipzz-938 替身輪●遊戲 明明只是拯救了被欺負的學生… 把美巨乳實習女老師推入地獄深淵的惡徒們，復仇集體強● 辻美衣奈 花吹詩音" data-actress="花吹詩音" data-tags="中文字幕, 角色劇情, 絲襪美腿, 多p群交, 制服誘惑, 凌辱快感, 錄像, 老師, 學校, 集團進犯, 進犯, 多p, 凌辱, 美腿, 短髮, 絲襪, 顏射, 巨乳, 少女" data-date="2026-10-24">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62815/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="IPZZ-938 替身輪●遊戲 明明只是拯救了被欺負的學生… 把美巨乳實習女老師推入地獄深淵的惡徒們，復仇集體強● 辻美衣奈 花吹詩音">IPZZ-938 替身輪●遊戲 明明只是拯救了被欺負的學生… 把美巨乳實習女老師推入地獄深淵的惡徒們，復仇集體強● 辻美衣奈 花吹詩音</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 花吹詩音</span>
+                    <span class="date">📅 2026-10-24</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 多P群交, 制服誘惑, 凌辱快感, 錄像, 老師, 學校, 集團進犯, 進犯, 多P, 凌辱, 美腿, 短髮, 絲襪, 顏射, 巨乳, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 多P群交, 制服誘惑, 凌辱快感, 錄像, 老師, 學校, 集團進犯, 進犯, 多P, 凌辱, 美腿, 短髮, 絲襪, 顏射, 巨乳, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/ipzz-938/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="snos-375 才剛見面就拉下褲子拉鍊！明明很可愛卻下流得要死的出租巨乳女友 夏生夏" data-actress="夏生夏" data-tags="中文字幕, 角色劇情, 絲襪美腿, 風俗娘, 黑絲, 乳交, 美腿, 短髮, 絲襪, 顏射, 巨乳, 少女" data-date="2026-10-24">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62822/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="SNOS-375 才剛見面就拉下褲子拉鍊！明明很可愛卻下流得要死的出租巨乳女友 夏生夏">SNOS-375 才剛見面就拉下褲子拉鍊！明明很可愛卻下流得要死的出租巨乳女友 夏生夏</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 夏生夏</span>
+                    <span class="date">📅 2026-10-24</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 風俗娘, 黑絲, 乳交, 美腿, 短髮, 絲襪, 顏射, 巨乳, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 風俗娘, 黑絲, 乳交, 美腿, 短髮, 絲襪, 顏射, 巨乳, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/snos-375/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="snos-393 甜美ol死都討厭的性騷擾上司獲得的時間停止技能 初美菜乃花" data-actress="初美菜乃花" data-tags="中文字幕, 制服誘惑, 絲襪美腿, 角色劇情, 少女, 顏射, 絲襪, 美腿, 黑絲, 凌辱, ol, 廁所, 時間停止" data-date="2026-10-24">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62825/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="SNOS-393 甜美OL死都討厭的性騷擾上司獲得的時間停止技能 初美菜乃花">SNOS-393 甜美OL死都討厭的性騷擾上司獲得的時間停止技能 初美菜乃花</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 初美菜乃花</span>
+                    <span class="date">📅 2026-10-24</span>
+                </div>
+                <div class="tags" title="中文字幕, 制服誘惑, 絲襪美腿, 角色劇情, 少女, 顏射, 絲襪, 美腿, 黑絲, 凌辱, OL, 廁所, 時間停止">🏷️ 中文字幕, 制服誘惑, 絲襪美腿, 角色劇情, 少女, 顏射, 絲襪, 美腿, 黑絲, 凌辱, OL, 廁所, 時間停止</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/snos-393/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="mida-766 這裡是離女子大學最近的車站！美巨乳按摩妹只在危險日發情期用游走邊緣的鼠蹊部按摩與甜言蜜語緊貼誘惑的加價內射服務的紳士按摩 小野六花" data-actress="小野六花" data-tags="中文字幕, 男友視角, 角色劇情, 絲襪美腿, 旗袍, 和服, 按摩, 潮吹, 美腿, 絲襪, 顏射, 中出, 少女" data-date="2026-10-22">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62790/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="MIDA-766 這裡是離女子大學最近的車站！美巨乳按摩妹只在危險日發情期用游走邊緣的鼠蹊部按摩與甜言蜜語緊貼誘惑的加價內射服務的紳士按摩 小野六花">MIDA-766 這裡是離女子大學最近的車站！美巨乳按摩妹只在危險日發情期用游走邊緣的鼠蹊部按摩與甜言蜜語緊貼誘惑的加價內射服務的紳士按摩 小野六花</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 小野六花</span>
+                    <span class="date">📅 2026-10-22</span>
+                </div>
+                <div class="tags" title="中文字幕, 男友視角, 角色劇情, 絲襪美腿, 旗袍, 和服, 按摩, 潮吹, 美腿, 絲襪, 顏射, 中出, 少女">🏷️ 中文字幕, 男友視角, 角色劇情, 絲襪美腿, 旗袍, 和服, 按摩, 潮吹, 美腿, 絲襪, 顏射, 中出, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/mida-766/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="mida-781 「超～喜歡口交」父母再婚而成為家人的愛舔肉棒的思春期巨乳繼妹，穿著下流的角色扮演服裝乞求肉棒 連最後一滴都吃乾抹淨 奥井千晴" data-actress="奥井千晴" data-tags="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 男友視角, 獸耳, 眼鏡娘, 校服, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女" data-date="2026-10-22">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62794/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="MIDA-781 「超～喜歡口交」父母再婚而成為家人的愛舔肉棒的思春期巨乳繼妹，穿著下流的角色扮演服裝乞求肉棒 連最後一滴都吃乾抹淨 奥井千晴">MIDA-781 「超～喜歡口交」父母再婚而成為家人的愛舔肉棒的思春期巨乳繼妹，穿著下流的角色扮演服裝乞求肉棒 連最後一滴都吃乾抹淨 奥井千晴</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 奥井千晴</span>
+                    <span class="date">📅 2026-10-22</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 男友視角, 獸耳, 眼鏡娘, 校服, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 男友視角, 獸耳, 眼鏡娘, 校服, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/mida-781/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="mida-737 【抖m專用】被美巨乳正妹高高在上的眼神俯視，用絕品美體持續搓弄到蛋蛋廢掉為止的罵倒風俗全套服務 葵伊吹" data-actress="葵伊吹" data-tags="中文字幕, 角色劇情, 絲襪美腿, 男友視角, 制服誘惑, 男m, 綑綁, 女僕, 風俗娘, 腳交, 吊帶襪, 漁網, 潮吹, 校服, 黑絲, 美腿, 絲襪, 巨乳, 中出, 少女" data-date="2026-10-21">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62773/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="MIDA-737 【抖M專用】被美巨乳正妹高高在上的眼神俯視，用絕品美體持續搓弄到蛋蛋廢掉為止的罵倒風俗全套服務 葵伊吹">MIDA-737 【抖M專用】被美巨乳正妹高高在上的眼神俯視，用絕品美體持續搓弄到蛋蛋廢掉為止的罵倒風俗全套服務 葵伊吹</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 葵伊吹</span>
+                    <span class="date">📅 2026-10-21</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 男友視角, 制服誘惑, 男M, 綑綁, 女僕, 風俗娘, 腳交, 吊帶襪, 漁網, 潮吹, 校服, 黑絲, 美腿, 絲襪, 巨乳, 中出, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 男友視角, 制服誘惑, 男M, 綑綁, 女僕, 風俗娘, 腳交, 吊帶襪, 漁網, 潮吹, 校服, 黑絲, 美腿, 絲襪, 巨乳, 中出, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/mida-737/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="mida-759 完全沒有劇本！禁慾一個月的美巨乳妹子一直被挑逗到高潮邊緣為止，敏感度飆升到極限的野獸級大亂交 純白彩永" data-actress="純白彩永" data-tags="中文字幕, 直接開啪, 多p群交, 吊帶襪, 多p, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女" data-date="2026-10-21">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62774/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="MIDA-759 完全沒有劇本！禁慾一個月的美巨乳妹子一直被挑逗到高潮邊緣為止，敏感度飆升到極限的野獸級大亂交 純白彩永">MIDA-759 完全沒有劇本！禁慾一個月的美巨乳妹子一直被挑逗到高潮邊緣為止，敏感度飆升到極限的野獸級大亂交 純白彩永</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 純白彩永</span>
+                    <span class="date">📅 2026-10-21</span>
+                </div>
+                <div class="tags" title="中文字幕, 直接開啪, 多P群交, 吊帶襪, 多P, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女">🏷️ 中文字幕, 直接開啪, 多P群交, 吊帶襪, 多P, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/mida-759/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="mida-763 國寶級纖瘦巨乳身材被春藥潤滑液淋得滿滿、黏稠濕滑不間斷的絕頂內射全套服務 理性融化昇天高潮 百田光稀" data-actress="百田光稀" data-tags="中文字幕, 角色劇情, 絲襪美腿, 乳交, 泡姬, 媚藥, 黑絲, 美腿, 絲襪, 巨乳, 中出, 少女" data-date="2026-10-21">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62788/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="MIDA-763 國寶級纖瘦巨乳身材被春藥潤滑液淋得滿滿、黏稠濕滑不間斷的絕頂內射全套服務 理性融化昇天高潮 百田光稀">MIDA-763 國寶級纖瘦巨乳身材被春藥潤滑液淋得滿滿、黏稠濕滑不間斷的絕頂內射全套服務 理性融化昇天高潮 百田光稀</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 百田光稀</span>
+                    <span class="date">📅 2026-10-21</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 乳交, 泡姬, 媚藥, 黑絲, 美腿, 絲襪, 巨乳, 中出, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 乳交, 泡姬, 媚藥, 黑絲, 美腿, 絲襪, 巨乳, 中出, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/mida-763/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="jur-850 「你一直盯著我屁股看對吧？」 上班時讓人在意到不行的欲求不滿翹臀巨乳女上司和她一起體態管理後… 一有空就稱要鍛鍊然後用騎乘位內射被持續榨精。 風間由美" data-actress="風間由美" data-tags="中文字幕, 角色劇情, 絲襪美腿, 健身房, 美尻, 熟女, 黑絲, 美腿, 絲襪, 人妻, 巨乳, 中出" data-date="2026-10-20">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62641/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="JUR-850 「你一直盯著我屁股看對吧？」 上班時讓人在意到不行的欲求不滿翹臀巨乳女上司和她一起體態管理後… 一有空就稱要鍛鍊然後用騎乘位內射被持續榨精。 風間由美">JUR-850 「你一直盯著我屁股看對吧？」 上班時讓人在意到不行的欲求不滿翹臀巨乳女上司和她一起體態管理後… 一有空就稱要鍛鍊然後用騎乘位內射被持續榨精。 風間由美</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 風間由美</span>
+                    <span class="date">📅 2026-10-20</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 健身房, 美尻, 熟女, 黑絲, 美腿, 絲襪, 人妻, 巨乳, 中出">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 健身房, 美尻, 熟女, 黑絲, 美腿, 絲襪, 人妻, 巨乳, 中出</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/jur-850/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="dldss-534 跟好色巨乳人妻秘書做愛的我 美乃雀" data-actress="美乃雀" data-tags="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 吊帶襪, ol, 熟女, 黑絲, 美腿, 絲襪, 人妻, 巨乳, 中出" data-date="2026-10-20">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62671/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="DLDSS-534 跟好色巨乳人妻秘書做愛的我 美乃雀">DLDSS-534 跟好色巨乳人妻秘書做愛的我 美乃雀</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 美乃雀</span>
+                    <span class="date">📅 2026-10-20</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 吊帶襪, OL, 熟女, 黑絲, 美腿, 絲襪, 人妻, 巨乳, 中出">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 吊帶襪, OL, 熟女, 黑絲, 美腿, 絲襪, 人妻, 巨乳, 中出</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/dldss-534/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="roe-555 巨乳媽媽與最愛的女兒男友，沉溺於激烈痙攣的性愛中。 永峰椿" data-actress="永峰椿" data-tags="中文字幕, 角色劇情, 絲襪美腿, 出軌, 痙攣, 吊帶襪, 潮吹, 熟女, 黑絲, 美腿, 口爆, 絲襪, 人妻, 巨乳, 中出" data-date="2026-10-20">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62663/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="ROE-555 巨乳媽媽與最愛的女兒男友，沉溺於激烈痙攣的性愛中。 永峰椿">ROE-555 巨乳媽媽與最愛的女兒男友，沉溺於激烈痙攣的性愛中。 永峰椿</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 永峰椿</span>
+                    <span class="date">📅 2026-10-20</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 出軌, 痙攣, 吊帶襪, 潮吹, 熟女, 黑絲, 美腿, 口爆, 絲襪, 人妻, 巨乳, 中出">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 出軌, 痙攣, 吊帶襪, 潮吹, 熟女, 黑絲, 美腿, 口爆, 絲襪, 人妻, 巨乳, 中出</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/roe-555/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="roe-554 「絕對、絕對…要幫我保密喔」人妻的祕密假日，在女性風俗店遇見兒子的朋友，沉溺禁忌約會打炮。 星冬香" data-actress="星冬香" data-tags="中文字幕, 角色劇情, 絲襪美腿, 顏射, 接吻, 熟女, 黑絲, 美腿, 出軌, 短髮, 絲襪, 人妻, 中出" data-date="2026-10-20">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62668/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="ROE-554 「絕對、絕對…要幫我保密喔」人妻的祕密假日，在女性風俗店遇見兒子的朋友，沉溺禁忌約會打炮。 星冬香">ROE-554 「絕對、絕對…要幫我保密喔」人妻的祕密假日，在女性風俗店遇見兒子的朋友，沉溺禁忌約會打炮。 星冬香</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 星冬香</span>
+                    <span class="date">📅 2026-10-20</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 顏射, 接吻, 熟女, 黑絲, 美腿, 出軌, 短髮, 絲襪, 人妻, 中出">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 顏射, 接吻, 熟女, 黑絲, 美腿, 出軌, 短髮, 絲襪, 人妻, 中出</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/roe-554/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="adn-799 早晨醒來時睡在旁邊的竟是公司的巨乳女前輩。平時總是嚴厲發火的前輩，卻用撒嬌的聲音對我說：「要繼續昨天的事情嗎？」 海老咲碧" data-actress="海老咲碧" data-tags="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, ol, 黑絲, 美腿, 口爆, 出軌, 絲襪, 顏射, 巨乳, 少女, 痴女" data-date="2026-10-20">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62725/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="ADN-799 早晨醒來時睡在旁邊的竟是公司的巨乳女前輩。平時總是嚴厲發火的前輩，卻用撒嬌的聲音對我說：「要繼續昨天的事情嗎？」 海老咲碧">ADN-799 早晨醒來時睡在旁邊的竟是公司的巨乳女前輩。平時總是嚴厲發火的前輩，卻用撒嬌的聲音對我說：「要繼續昨天的事情嗎？」 海老咲碧</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 海老咲碧</span>
+                    <span class="date">📅 2026-10-20</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, OL, 黑絲, 美腿, 口爆, 出軌, 絲襪, 顏射, 巨乳, 少女, 痴女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, OL, 黑絲, 美腿, 口爆, 出軌, 絲襪, 顏射, 巨乳, 少女, 痴女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/adn-799/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="cawb-006 就像色色短影音的續集一樣，隨便闖進我房間幫我打手槍、壞壞調戲我的隔壁抖s美巨乳大姊姊 伊藤舞雪" data-actress="伊藤舞雪" data-tags="中文字幕, 絲襪美腿, 角色劇情, 男友視角, 中出, 巨乳, 絲襪, 口爆, 美腿, 過膝襪, 女僕" data-date="2026-10-20">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62728/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="CAWB-006 就像色色短影音的續集一樣，隨便闖進我房間幫我打手槍、壞壞調戲我的隔壁抖S美巨乳大姊姊 伊藤舞雪">CAWB-006 就像色色短影音的續集一樣，隨便闖進我房間幫我打手槍、壞壞調戲我的隔壁抖S美巨乳大姊姊 伊藤舞雪</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 伊藤舞雪</span>
+                    <span class="date">📅 2026-10-20</span>
+                </div>
+                <div class="tags" title="中文字幕, 絲襪美腿, 角色劇情, 男友視角, 中出, 巨乳, 絲襪, 口爆, 美腿, 過膝襪, 女僕">🏷️ 中文字幕, 絲襪美腿, 角色劇情, 男友視角, 中出, 巨乳, 絲襪, 口爆, 美腿, 過膝襪, 女僕</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/cawb-006/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="cawb-033 少女界史上最高品質的好女人。最上級的任性美巨乳身材。花咲由羅 重口味 痙攣、絕頂、顏面射精。 花咲由羅" data-actress="花咲由羅" data-tags="中文字幕, 絲襪美腿, 直接開啪, 巨乳, 監獄, 媚藥, 痙攣, 黑絲, 美腿, 3p, 絲襪, 顏射, 少女" data-date="2026-10-20">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62731/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="CAWB-033 少女界史上最高品質的好女人。最上級的任性美巨乳身材。花咲由羅 重口味 痙攣、絕頂、顏面射精。 花咲由羅">CAWB-033 少女界史上最高品質的好女人。最上級的任性美巨乳身材。花咲由羅 重口味 痙攣、絕頂、顏面射精。 花咲由羅</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 花咲由羅</span>
+                    <span class="date">📅 2026-10-20</span>
+                </div>
+                <div class="tags" title="中文字幕, 絲襪美腿, 直接開啪, 巨乳, 監獄, 媚藥, 痙攣, 黑絲, 美腿, 3P, 絲襪, 顏射, 少女">🏷️ 中文字幕, 絲襪美腿, 直接開啪, 巨乳, 監獄, 媚藥, 痙攣, 黑絲, 美腿, 3P, 絲襪, 顏射, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/cawb-033/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="pppe-449 女朋友的超正姊姊用巨乳和無套內射來誘惑我 彩月七緒" data-actress="彩月七緒" data-tags="中文字幕, 男友視角, 絲襪美腿, 角色劇情, 少女, 中出, 巨乳, 絲襪, 出軌, 美腿, 乳交, ntr, 誘惑, 吊帶襪" data-date="2026-10-20">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62724/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="PPPE-449 女朋友的超正姊姊用巨乳和無套內射來誘惑我 彩月七緒">PPPE-449 女朋友的超正姊姊用巨乳和無套內射來誘惑我 彩月七緒</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 彩月七緒</span>
+                    <span class="date">📅 2026-10-20</span>
+                </div>
+                <div class="tags" title="中文字幕, 男友視角, 絲襪美腿, 角色劇情, 少女, 中出, 巨乳, 絲襪, 出軌, 美腿, 乳交, NTR, 誘惑, 吊帶襪">🏷️ 中文字幕, 男友視角, 絲襪美腿, 角色劇情, 少女, 中出, 巨乳, 絲襪, 出軌, 美腿, 乳交, NTR, 誘惑, 吊帶襪</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/pppe-449/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="dldss-551 渴望慾望的社長夫人密訪汗臭油膩中年男的用務員室 櫻坂風花" data-actress="櫻坂風花" data-tags="中文字幕, 多p群交, 絲襪美腿, 角色劇情, 中出, 巨乳, 人妻, 絲襪, 美腿, 黑絲, 熟女, 多p" data-date="2026-10-20">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62734/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="DLDSS-551 渴望慾望的社長夫人密訪汗臭油膩中年男的用務員室 櫻坂風花">DLDSS-551 渴望慾望的社長夫人密訪汗臭油膩中年男的用務員室 櫻坂風花</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 櫻坂風花</span>
+                    <span class="date">📅 2026-10-20</span>
+                </div>
+                <div class="tags" title="中文字幕, 多P群交, 絲襪美腿, 角色劇情, 中出, 巨乳, 人妻, 絲襪, 美腿, 黑絲, 熟女, 多P">🏷️ 中文字幕, 多P群交, 絲襪美腿, 角色劇情, 中出, 巨乳, 人妻, 絲襪, 美腿, 黑絲, 熟女, 多P</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/dldss-551/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="jur-795 將公司不起眼的巨乳人妻會計，調教成≪濃厚抖m潮吹≫狂噴、專屬於我的巨乳情婦。 白石茉莉奈" data-actress="白石茉莉奈" data-tags="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, ol, 潮吹, 熟女, 黑絲, 乳交, 美腿, 口爆, 絲襪, 人妻, 巨乳, 中出, 眼鏡娘" data-date="2026-10-16">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62637/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="JUR-795 將公司不起眼的巨乳人妻會計，調教成≪濃厚抖M潮吹≫狂噴、專屬於我的巨乳情婦。 白石茉莉奈">JUR-795 將公司不起眼的巨乳人妻會計，調教成≪濃厚抖M潮吹≫狂噴、專屬於我的巨乳情婦。 白石茉莉奈</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 白石茉莉奈</span>
+                    <span class="date">📅 2026-10-16</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, OL, 潮吹, 熟女, 黑絲, 乳交, 美腿, 口爆, 絲襪, 人妻, 巨乳, 中出, 眼鏡娘">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, OL, 潮吹, 熟女, 黑絲, 乳交, 美腿, 口爆, 絲襪, 人妻, 巨乳, 中出, 眼鏡娘</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/jur-795/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="ipzz-927 在喪禮上與久別重逢的同學們喝酒被灌醉，明明已經為人妻，昔日淫蕩妹子的本性卻再次爆發，被不斷內射輪●的金髮喪服美巨乳辣妹 西宮夢" data-actress="西宮夢" data-tags="中文字幕, 絲襪美腿, 多p群交, 角色劇情, 集團進犯, 多p, 黑絲, 美腿, 口爆, 泥醉, 腳交, 出軌, 絲襪, 人妻, 中出, 少女" data-date="2026-10-15">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62612/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="IPZZ-927 在喪禮上與久別重逢的同學們喝酒被灌醉，明明已經為人妻，昔日淫蕩妹子的本性卻再次爆發，被不斷內射輪●的金髮喪服美巨乳辣妹 西宮夢">IPZZ-927 在喪禮上與久別重逢的同學們喝酒被灌醉，明明已經為人妻，昔日淫蕩妹子的本性卻再次爆發，被不斷內射輪●的金髮喪服美巨乳辣妹 西宮夢</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 西宮夢</span>
+                    <span class="date">📅 2026-10-15</span>
+                </div>
+                <div class="tags" title="中文字幕, 絲襪美腿, 多P群交, 角色劇情, 集團進犯, 多P, 黑絲, 美腿, 口爆, 泥醉, 腳交, 出軌, 絲襪, 人妻, 中出, 少女">🏷️ 中文字幕, 絲襪美腿, 多P群交, 角色劇情, 集團進犯, 多P, 黑絲, 美腿, 口爆, 泥醉, 腳交, 出軌, 絲襪, 人妻, 中出, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/ipzz-927/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="achj-095 高學歷淫語癡女 侵犯耳朵將大腦徹底融化的魔性教授 藤環奈" data-actress="藤環奈" data-tags="中文字幕, 制服誘惑, 男友視角, 絲襪美腿, 角色劇情, 顏射, 絲襪, 美腿, 黑絲, 痴女, 漁網, ol, 吊帶襪, 眼鏡娘, 軟體" data-date="2026-10-15">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62631/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="ACHJ-095 高學歷淫語癡女 侵犯耳朵將大腦徹底融化的魔性教授 藤環奈">ACHJ-095 高學歷淫語癡女 侵犯耳朵將大腦徹底融化的魔性教授 藤環奈</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 藤環奈</span>
+                    <span class="date">📅 2026-10-15</span>
+                </div>
+                <div class="tags" title="中文字幕, 制服誘惑, 男友視角, 絲襪美腿, 角色劇情, 顏射, 絲襪, 美腿, 黑絲, 痴女, 漁網, OL, 吊帶襪, 眼鏡娘, 軟體">🏷️ 中文字幕, 制服誘惑, 男友視角, 絲襪美腿, 角色劇情, 顏射, 絲襪, 美腿, 黑絲, 痴女, 漁網, OL, 吊帶襪, 眼鏡娘, 軟體</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/achj-095/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="snos-336 從異世界召喚而來、鬆軟極致l罩杯的巨乳女僕 田野憂" data-actress="田野憂" data-tags="中文字幕, 男友視角, 絲襪美腿, 角色劇情, 少女, 巨乳, 絲襪, 美腿, 乳交, 黑絲, 眼鏡娘, 過膝襪, 女僕, cosplay, 獸耳" data-date="2026-10-14">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62597/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="SNOS-336 從異世界召喚而來、鬆軟極致L罩杯的巨乳女僕 田野憂">SNOS-336 從異世界召喚而來、鬆軟極致L罩杯的巨乳女僕 田野憂</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 田野憂</span>
+                    <span class="date">📅 2026-10-14</span>
+                </div>
+                <div class="tags" title="中文字幕, 男友視角, 絲襪美腿, 角色劇情, 少女, 巨乳, 絲襪, 美腿, 乳交, 黑絲, 眼鏡娘, 過膝襪, 女僕, Cosplay, 獸耳">🏷️ 中文字幕, 男友視角, 絲襪美腿, 角色劇情, 少女, 巨乳, 絲襪, 美腿, 乳交, 黑絲, 眼鏡娘, 過膝襪, 女僕, Cosplay, 獸耳</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/snos-336/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="snos-374 非常清楚自己是美女的美巨乳女醫生，色氣全開讓患者硬起來後…連肉棒按摩都親・自・幫・你・做 川越仁子" data-actress="川越仁子" data-tags="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 顏射, 醫生, 眼鏡娘, 漁網, 潮吹, 黑絲, 美腿, 絲襪, 巨乳, 少女" data-date="2026-10-14">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62603/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="SNOS-374 非常清楚自己是美女的美巨乳女醫生，色氣全開讓患者硬起來後…連肉棒按摩都親・自・幫・你・做 川越仁子">SNOS-374 非常清楚自己是美女的美巨乳女醫生，色氣全開讓患者硬起來後…連肉棒按摩都親・自・幫・你・做 川越仁子</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 川越仁子</span>
+                    <span class="date">📅 2026-10-14</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 顏射, 醫生, 眼鏡娘, 漁網, 潮吹, 黑絲, 美腿, 絲襪, 巨乳, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 顏射, 醫生, 眼鏡娘, 漁網, 潮吹, 黑絲, 美腿, 絲襪, 巨乳, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/snos-374/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="snos-406 看到了嚴肅的巨乳護理長在偷偷自慰！偷窺被發現之後演變成互相做變態色色事的關係… 奥田咲" data-actress="奥田咲" data-tags="中文字幕, 絲襪美腿, 角色劇情, 制服誘惑, 痴女, 熟女, 乳交, 美腿, 短髮, 絲襪, 巨乳, 潮吹, 漁網, 眼鏡娘, 護士" data-date="2026-10-14">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62605/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="SNOS-406 看到了嚴肅的巨乳護理長在偷偷自慰！偷窺被發現之後演變成互相做變態色色事的關係… 奥田咲">SNOS-406 看到了嚴肅的巨乳護理長在偷偷自慰！偷窺被發現之後演變成互相做變態色色事的關係… 奥田咲</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 奥田咲</span>
+                    <span class="date">📅 2026-10-14</span>
+                </div>
+                <div class="tags" title="中文字幕, 絲襪美腿, 角色劇情, 制服誘惑, 痴女, 熟女, 乳交, 美腿, 短髮, 絲襪, 巨乳, 潮吹, 漁網, 眼鏡娘, 護士">🏷️ 中文字幕, 絲襪美腿, 角色劇情, 制服誘惑, 痴女, 熟女, 乳交, 美腿, 短髮, 絲襪, 巨乳, 潮吹, 漁網, 眼鏡娘, 護士</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/snos-406/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="dfdm-075 小惡魔男的美感少女透過內褲誘惑 流川莉央" data-actress="流川莉央" data-tags="中文字幕, 角色劇情, 絲襪美腿, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女, 誘惑, 過膝襪, 白虎" data-date="2026-10-08">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62451/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="DFDM-075 小惡魔男的美感少女透過內褲誘惑 流川莉央">DFDM-075 小惡魔男的美感少女透過內褲誘惑 流川莉央</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 流川莉央</span>
+                    <span class="date">📅 2026-10-08</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女, 誘惑, 過膝襪, 白虎">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女, 誘惑, 過膝襪, 白虎</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/dfdm-075/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="ipzz-947 被討厭的女主管陷害，與最討厭的性騷擾部長出差同房… 在高溫潮濕汗流浹背的絕倫性愛中沉淪快感的纖瘦巨乳女員工 坂井美櫻" data-actress="坂井美櫻" data-tags="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, ol, 泥醉, ntr, 凌辱, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女" data-date="2026-10-05">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62407/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="IPZZ-947 被討厭的女主管陷害，與最討厭的性騷擾部長出差同房… 在高溫潮濕汗流浹背的絕倫性愛中沉淪快感的纖瘦巨乳女員工 坂井美櫻">IPZZ-947 被討厭的女主管陷害，與最討厭的性騷擾部長出差同房… 在高溫潮濕汗流浹背的絕倫性愛中沉淪快感的纖瘦巨乳女員工 坂井美櫻</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 坂井美櫻</span>
+                    <span class="date">📅 2026-10-05</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, OL, 泥醉, NTR, 凌辱, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, OL, 泥醉, NTR, 凌辱, 黑絲, 美腿, 絲襪, 顏射, 巨乳, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/ipzz-947/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="waaa-685 一按呼叫鈴就笑咪咪口交的吸肉棒吞精巨乳新人女護士 24 發 鈴之家鈴" data-actress="鈴之家鈴" data-tags="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 3p, 中出, 護士, 吊帶襪, 口交, 漁網, 美腿, 口爆, 絲襪, 顏射, 少女" data-date="2026-10-05">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62411/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="WAAA-685 一按呼叫鈴就笑咪咪口交的吸肉棒吞精巨乳新人女護士 24 發 鈴之家鈴">WAAA-685 一按呼叫鈴就笑咪咪口交的吸肉棒吞精巨乳新人女護士 24 發 鈴之家鈴</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 鈴之家鈴</span>
+                    <span class="date">📅 2026-10-05</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 3P, 中出, 護士, 吊帶襪, 口交, 漁網, 美腿, 口爆, 絲襪, 顏射, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 3P, 中出, 護士, 吊帶襪, 口交, 漁網, 美腿, 口爆, 絲襪, 顏射, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/waaa-685/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="yuj-073 向我告白的兒子的同班同學，由我來教導他大人約會的那一天。 小野梨花" data-actress="小野梨花" data-tags="中文字幕, 角色劇情, 絲襪美腿, 絲襪, 人妻, 中出, 出軌, 熟女, 痴女, 美腿" data-date="2026-10-05">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62412/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="YUJ-073 向我告白的兒子的同班同學，由我來教導他大人約會的那一天。 小野梨花">YUJ-073 向我告白的兒子的同班同學，由我來教導他大人約會的那一天。 小野梨花</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 小野梨花</span>
+                    <span class="date">📅 2026-10-05</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 絲襪, 人妻, 中出, 出軌, 熟女, 痴女, 美腿">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 絲襪, 人妻, 中出, 出軌, 熟女, 痴女, 美腿</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/yuj-073/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="snos-335 「沒有你的電車痴漢，我已經活不下去了…」認真嚴肅的巨乳女老師在第一次遇到電車痴漢後，淪為官能技巧與刺激感的俘虜。 木村愛心" data-actress="木村愛心" data-tags="中文字幕, 凌辱快感, 制服誘惑, 絲襪美腿, 角色劇情, 少女, 巨乳, 絲襪, 美腿, 黑絲, 凌辱, 進犯, 老師, 痴漢, 電車" data-date="2026-10-02">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62200/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="SNOS-335 「沒有你的電車痴漢，我已經活不下去了…」認真嚴肅的巨乳女老師在第一次遇到電車痴漢後，淪為官能技巧與刺激感的俘虜。 木村愛心">SNOS-335 「沒有你的電車痴漢，我已經活不下去了…」認真嚴肅的巨乳女老師在第一次遇到電車痴漢後，淪為官能技巧與刺激感的俘虜。 木村愛心</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 木村愛心</span>
+                    <span class="date">📅 2026-10-02</span>
+                </div>
+                <div class="tags" title="中文字幕, 凌辱快感, 制服誘惑, 絲襪美腿, 角色劇情, 少女, 巨乳, 絲襪, 美腿, 黑絲, 凌辱, 進犯, 老師, 痴漢, 電車">🏷️ 中文字幕, 凌辱快感, 制服誘惑, 絲襪美腿, 角色劇情, 少女, 巨乳, 絲襪, 美腿, 黑絲, 凌辱, 進犯, 老師, 痴漢, 電車</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/snos-335/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="hmn-886 色色巨乳人妻的精子爭奪戰，後宮居家風俗公寓 彩月七緒 羽月乃蒼" data-actress="羽月乃蒼" data-tags="中文字幕, 角色劇情, 絲襪美腿, 男友視角, 制服誘惑, 泡姬, 吊帶襪, 漁網, 黑絲, 校服, 乳交, 美腿, 3p, 出軌, 絲襪, 人妻, 巨乳, 少女" data-date="2026-10-02">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62224/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="HMN-886 色色巨乳人妻的精子爭奪戰，後宮居家風俗公寓 彩月七緒 羽月乃蒼">HMN-886 色色巨乳人妻的精子爭奪戰，後宮居家風俗公寓 彩月七緒 羽月乃蒼</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 羽月乃蒼</span>
+                    <span class="date">📅 2026-10-02</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 男友視角, 制服誘惑, 泡姬, 吊帶襪, 漁網, 黑絲, 校服, 乳交, 美腿, 3P, 出軌, 絲襪, 人妻, 巨乳, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 男友視角, 制服誘惑, 泡姬, 吊帶襪, 漁網, 黑絲, 校服, 乳交, 美腿, 3P, 出軌, 絲襪, 人妻, 巨乳, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/hmn-886/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="roe-513 清潔感洋溢的爽朗「印象」笑容，但「本性」是飢渴肉慾的巨乳淫獸 新人 永峰椿 41歲 av 出道 對「性」貪婪的肉體像野獸一樣汗水淋漓追求男人。 永峰椿" data-actress="永峰椿" data-tags="中文字幕, 直接開啪, 絲襪美腿, 處女作/引退作, 美尻, 潮吹, 熟女, 黑絲, 美腿, 3p, 絲襪, 人妻, 顏射" data-date="2026-10-02">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62236/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="ROE-513 清潔感洋溢的爽朗「印象」笑容，但「本性」是飢渴肉慾的巨乳淫獸 新人 永峰椿 41歲 AV 出道 對「性」貪婪的肉體像野獸一樣汗水淋漓追求男人。 永峰椿">ROE-513 清潔感洋溢的爽朗「印象」笑容，但「本性」是飢渴肉慾的巨乳淫獸 新人 永峰椿 41歲 AV 出道 對「性」貪婪的肉體像野獸一樣汗水淋漓追求男人。 永峰椿</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 永峰椿</span>
+                    <span class="date">📅 2026-10-02</span>
+                </div>
+                <div class="tags" title="中文字幕, 直接開啪, 絲襪美腿, 處女作/引退作, 美尻, 潮吹, 熟女, 黑絲, 美腿, 3P, 絲襪, 人妻, 顏射">🏷️ 中文字幕, 直接開啪, 絲襪美腿, 處女作/引退作, 美尻, 潮吹, 熟女, 黑絲, 美腿, 3P, 絲襪, 人妻, 顏射</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/roe-513/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="roe-526 我與最愛的女兒男友，沉溺於激烈痙攣的性愛中。 三雲彩葉" data-actress="三雲彩葉" data-tags="中文字幕, 角色劇情, 絲襪美腿, 吊帶襪, 潮吹, 熟女, 黑絲, 美腿, 口爆, 出軌, 絲襪, 人妻, 中出" data-date="2026-10-02">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62237/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="ROE-526 我與最愛的女兒男友，沉溺於激烈痙攣的性愛中。 三雲彩葉">ROE-526 我與最愛的女兒男友，沉溺於激烈痙攣的性愛中。 三雲彩葉</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 三雲彩葉</span>
+                    <span class="date">📅 2026-10-02</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 吊帶襪, 潮吹, 熟女, 黑絲, 美腿, 口爆, 出軌, 絲襪, 人妻, 中出">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 吊帶襪, 潮吹, 熟女, 黑絲, 美腿, 口爆, 出軌, 絲襪, 人妻, 中出</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/roe-526/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="roe-540 殉愛調教的甜蜜房間！為了兒子，奉獻自己肉體的巨乳母親。 大島優香" data-actress="大島優香" data-tags="中文字幕, 角色劇情, 絲襪美腿, 多p群交, 顏射, 綑綁, 多p, 調教, 潮吹, 熟女, 黑絲, 美腿, 絲襪, 人妻, 中出" data-date="2026-10-02">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62248/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="ROE-540 殉愛調教的甜蜜房間！為了兒子，奉獻自己肉體的巨乳母親。 大島優香">ROE-540 殉愛調教的甜蜜房間！為了兒子，奉獻自己肉體的巨乳母親。 大島優香</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 大島優香</span>
+                    <span class="date">📅 2026-10-02</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 多P群交, 顏射, 綑綁, 多P, 調教, 潮吹, 熟女, 黑絲, 美腿, 絲襪, 人妻, 中出">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 多P群交, 顏射, 綑綁, 多P, 調教, 潮吹, 熟女, 黑絲, 美腿, 絲襪, 人妻, 中出</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/roe-540/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="fns-244 樸素的ol後輩臀部太過豐滿，讓人忍不住從後方抽插 神喜美亞" data-actress="神喜美亞" data-tags="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 眼鏡娘, ol, 美尻, 黑絲, 美腿, 絲襪, 顏射, 少女" data-date="2026-10-02">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62260/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="FNS-244 樸素的OL後輩臀部太過豐滿，讓人忍不住從後方抽插 神喜美亞">FNS-244 樸素的OL後輩臀部太過豐滿，讓人忍不住從後方抽插 神喜美亞</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 神喜美亞</span>
+                    <span class="date">📅 2026-10-02</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 眼鏡娘, OL, 美尻, 黑絲, 美腿, 絲襪, 顏射, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 眼鏡娘, OL, 美尻, 黑絲, 美腿, 絲襪, 顏射, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/fns-244/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="cjod-591 m男専用的無限射精巨乳泡泡浴，用色色的耳語讓你一遍又一遍地射精 結城莉乃" data-actress="結城莉乃" data-tags="中文字幕, 男友視角, 絲襪美腿, 角色劇情, 少女, 中出, 巨乳, 顏射, 絲襪, 口爆, 美腿, 乳交, 黑絲, 痴女, 吊帶襪, 男m, 泡姬" data-date="2026-10-02">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62282/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="CJOD-591 M男専用的無限射精巨乳泡泡浴，用色色的耳語讓你一遍又一遍地射精 結城莉乃">CJOD-591 M男専用的無限射精巨乳泡泡浴，用色色的耳語讓你一遍又一遍地射精 結城莉乃</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 結城莉乃</span>
+                    <span class="date">📅 2026-10-02</span>
+                </div>
+                <div class="tags" title="中文字幕, 男友視角, 絲襪美腿, 角色劇情, 少女, 中出, 巨乳, 顏射, 絲襪, 口爆, 美腿, 乳交, 黑絲, 痴女, 吊帶襪, 男M, 泡姬">🏷️ 中文字幕, 男友視角, 絲襪美腿, 角色劇情, 少女, 中出, 巨乳, 顏射, 絲襪, 口爆, 美腿, 乳交, 黑絲, 痴女, 吊帶襪, 男M, 泡姬</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/cjod-591/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="cjod-529 和色色巨乳情婦溫泉無套內射不倫 拋開工作、妻子與煩心事後幹好幹滿，沉浸在體液中的淫蕩背德之旅 宍戶里帆" data-actress="宍戶里帆" data-tags="中文字幕, 角色劇情, 絲襪美腿, 口爆, 溫泉, 和服, 黑絲, 乳交, 美腿, 出軌, 短髮, 絲襪, 顏射, 巨乳, 中出, 少女" data-date="2026-10-02">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62291/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="CJOD-529 和色色巨乳情婦溫泉無套內射不倫 拋開工作、妻子與煩心事後幹好幹滿，沉浸在體液中的淫蕩背德之旅 宍戶里帆">CJOD-529 和色色巨乳情婦溫泉無套內射不倫 拋開工作、妻子與煩心事後幹好幹滿，沉浸在體液中的淫蕩背德之旅 宍戶里帆</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 宍戶里帆</span>
+                    <span class="date">📅 2026-10-02</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 口爆, 溫泉, 和服, 黑絲, 乳交, 美腿, 出軌, 短髮, 絲襪, 顏射, 巨乳, 中出, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 口爆, 溫泉, 和服, 黑絲, 乳交, 美腿, 出軌, 短髮, 絲襪, 顏射, 巨乳, 中出, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/cjod-529/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="dsod-033 熟人外送 叫了純按摩外送 結果來了態度高高在上的巨乳前輩。 夏目玲香" data-actress="夏目玲香" data-tags="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 泡姬, ol, 潮吹, 熟女, 黑絲, 美腿, 口爆, 絲襪, 巨乳, 中出" data-date="2026-10-02">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62298/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="DSOD-033 熟人外送 叫了純按摩外送 結果來了態度高高在上的巨乳前輩。 夏目玲香">DSOD-033 熟人外送 叫了純按摩外送 結果來了態度高高在上的巨乳前輩。 夏目玲香</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 夏目玲香</span>
+                    <span class="date">📅 2026-10-02</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 泡姬, OL, 潮吹, 熟女, 黑絲, 美腿, 口爆, 絲襪, 巨乳, 中出">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 泡姬, OL, 潮吹, 熟女, 黑絲, 美腿, 口爆, 絲襪, 巨乳, 中出</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/dsod-033/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="dsod-035 視覺與聽覺享用的至高淫語體驗＆臉蛋特化的甜虐自慰輔導。倒數極限的邊緣挑逗，全台詞文字化徹底破壞你大腦的主觀視角 木下日葵" data-actress="木下日葵" data-tags="中文字幕, 男友視角, 直接開啪, 少女, 中出, 漁網, 美尻, 口交, 腳交, 長身" data-date="2026-10-02">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62299/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="DSOD-035 視覺與聽覺享用的至高淫語體驗＆臉蛋特化的甜虐自慰輔導。倒數極限的邊緣挑逗，全台詞文字化徹底破壞你大腦的主觀視角 木下日葵">DSOD-035 視覺與聽覺享用的至高淫語體驗＆臉蛋特化的甜虐自慰輔導。倒數極限的邊緣挑逗，全台詞文字化徹底破壞你大腦的主觀視角 木下日葵</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 木下日葵</span>
+                    <span class="date">📅 2026-10-02</span>
+                </div>
+                <div class="tags" title="中文字幕, 男友視角, 直接開啪, 少女, 中出, 漁網, 美尻, 口交, 腳交, 長身">🏷️ 中文字幕, 男友視角, 直接開啪, 少女, 中出, 漁網, 美尻, 口交, 腳交, 長身</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/dsod-035/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="dsod-037 被黑道囚禁，纖細的美巨乳女友逐漸墮入春藥性愛與群交，只有信任並守護她的一週。 笹倉彩" data-actress="笹倉彩" data-tags="中文字幕, 角色劇情, 絲襪美腿, 多p群交, 主奴調教, 長身, 顏射, 監獄, 錄像, 多p, 調教, 潮吹, 黑絲, 美腿, 絲襪, 巨乳, 中出, 少女" data-date="2026-10-02">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62300/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="DSOD-037 被黑道囚禁，纖細的美巨乳女友逐漸墮入春藥性愛與群交，只有信任並守護她的一週。 笹倉彩">DSOD-037 被黑道囚禁，纖細的美巨乳女友逐漸墮入春藥性愛與群交，只有信任並守護她的一週。 笹倉彩</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 笹倉彩</span>
+                    <span class="date">📅 2026-10-02</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 多P群交, 主奴調教, 長身, 顏射, 監獄, 錄像, 多P, 調教, 潮吹, 黑絲, 美腿, 絲襪, 巨乳, 中出, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 多P群交, 主奴調教, 長身, 顏射, 監獄, 錄像, 多P, 調教, 潮吹, 黑絲, 美腿, 絲襪, 巨乳, 中出, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/dsod-037/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="dsod-041 把蜜桃穴汁幹成蛋白霜為止。為了夢境般的伺候射精，努力猛搖屁股的騎乘位專用巨乳女僕 五日市芽依" data-actress="五日市芽依" data-tags="中文字幕, 角色劇情, 絲襪美腿, 男友視角, 女僕, 過膝襪, 腳交, 吊帶襪, 漁網, 美腿, 絲襪, 顏射, 巨乳, 中出, 少女" data-date="2026-10-02">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62302/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="DSOD-041 把蜜桃穴汁幹成蛋白霜為止。為了夢境般的伺候射精，努力猛搖屁股的騎乘位專用巨乳女僕 五日市芽依">DSOD-041 把蜜桃穴汁幹成蛋白霜為止。為了夢境般的伺候射精，努力猛搖屁股的騎乘位專用巨乳女僕 五日市芽依</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 五日市芽依</span>
+                    <span class="date">📅 2026-10-02</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 男友視角, 女僕, 過膝襪, 腳交, 吊帶襪, 漁網, 美腿, 絲襪, 顏射, 巨乳, 中出, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 男友視角, 女僕, 過膝襪, 腳交, 吊帶襪, 漁網, 美腿, 絲襪, 顏射, 巨乳, 中出, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/dsod-041/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="dsod-069 出差大暴雨，意外在討厭的上司面前喝醉了，不得不同睡一房，天亮之前，我們口水混在一起、滿身大汗瘋狂內射。 響蓮" data-actress="響蓮" data-tags="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 下雨天, 泥醉, ol, 凌辱, 黑絲, 美腿, 口爆, 絲襪, 中出, 少女" data-date="2026-10-02">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62305/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="DSOD-069 出差大暴雨，意外在討厭的上司面前喝醉了，不得不同睡一房，天亮之前，我們口水混在一起、滿身大汗瘋狂內射。 響蓮">DSOD-069 出差大暴雨，意外在討厭的上司面前喝醉了，不得不同睡一房，天亮之前，我們口水混在一起、滿身大汗瘋狂內射。 響蓮</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 響蓮</span>
+                    <span class="date">📅 2026-10-02</span>
+                </div>
+                <div class="tags" title="中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 下雨天, 泥醉, OL, 凌辱, 黑絲, 美腿, 口爆, 絲襪, 中出, 少女">🏷️ 中文字幕, 角色劇情, 絲襪美腿, 制服誘惑, 下雨天, 泥醉, OL, 凌辱, 黑絲, 美腿, 口爆, 絲襪, 中出, 少女</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/dsod-069/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="ipzz-912 最高級抖m奴隸 因醜聞被威脅玩弄侵犯 跪倒在被虐快感的高傲巨乳女社長的異常調教紀錄 櫻空桃" data-actress="櫻空桃" data-tags="中文字幕, 主奴調教, 凌辱快感, 制服誘惑, 絲襪美腿, 角色劇情, 多p群交, 少女, 巨乳, 顏射, 絲襪, 美腿, 黑絲, 凌辱, 潮吹, 調教, ol, 進犯, 錄像, 多p, 集團進犯" data-date="2026-10-02">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62308/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="IPZZ-912 最高級抖M奴隸 因醜聞被威脅玩弄侵犯 跪倒在被虐快感的高傲巨乳女社長的異常調教紀錄 櫻空桃">IPZZ-912 最高級抖M奴隸 因醜聞被威脅玩弄侵犯 跪倒在被虐快感的高傲巨乳女社長的異常調教紀錄 櫻空桃</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 櫻空桃</span>
+                    <span class="date">📅 2026-10-02</span>
+                </div>
+                <div class="tags" title="中文字幕, 主奴調教, 凌辱快感, 制服誘惑, 絲襪美腿, 角色劇情, 多P群交, 少女, 巨乳, 顏射, 絲襪, 美腿, 黑絲, 凌辱, 潮吹, 調教, OL, 進犯, 錄像, 多P, 集團進犯">🏷️ 中文字幕, 主奴調教, 凌辱快感, 制服誘惑, 絲襪美腿, 角色劇情, 多P群交, 少女, 巨乳, 顏射, 絲襪, 美腿, 黑絲, 凌辱, 潮吹, 調教, OL, 進犯, 錄像, 多P, 集團進犯</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/ipzz-912/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card" data-title="milk-303 專舔奶頭的甜虐系女學生，把懦弱的同班同學的奶頭玩弄得黏答答 滿是口水的悶絕濕滑痴女性愛 皆瀨明里" data-actress="皆瀨明里" data-tags="中文字幕, 制服誘惑, 角色劇情, 少女, 中出, 短髮, 校服, 痴女, 潮吹, 腳交" data-date="2026-10-02">
+            <img src="https://assets-cdn.jable.tv/contents/videos_screenshots/62000/62309/preview.jpg" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="MILK-303 專舔奶頭的甜虐系女學生，把懦弱的同班同學的奶頭玩弄得黏答答 滿是口水的悶絕濕滑痴女性愛 皆瀨明里">MILK-303 專舔奶頭的甜虐系女學生，把懦弱的同班同學的奶頭玩弄得黏答答 滿是口水的悶絕濕滑痴女性愛 皆瀨明里</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 皆瀨明里</span>
+                    <span class="date">📅 2026-10-02</span>
+                </div>
+                <div class="tags" title="中文字幕, 制服誘惑, 角色劇情, 少女, 中出, 短髮, 校服, 痴女, 潮吹, 腳交">🏷️ 中文字幕, 制服誘惑, 角色劇情, 少女, 中出, 短髮, 校服, 痴女, 潮吹, 腳交</div>
+                <div class="footer">
+                    <a href="https://jable.tv/videos/milk-303/" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="empty-msg" id="empty-msg">查無符合條件的影片</div>
+    </div>
+    <script>
+        const keywordCheckboxes = document.querySelectorAll('input[name="keyword"]');
+        const actressSelect = document.getElementById('actress-select');
+        const dateSort = document.getElementById('date-sort');
+        const visibleCountSpan = document.getElementById('visible-count');
+        const emptyMsg = document.getElementById('empty-msg');
+        const grid = document.getElementById('video-grid');
+        const cards = Array.from(document.querySelectorAll('.card'));
+
+        function applyFilter() {
+            const selectedKeywords = Array.from(keywordCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value.toLowerCase());
+            const actressVal = actressSelect.value.trim().toLowerCase();
+            
+            let visibleCount = 0;
+            cards.forEach(card => {
+                const actress = card.getAttribute('data-actress') || '';
+                const tags = card.getAttribute('data-tags') || '';
+                
+                const matchKeyword = selectedKeywords.length === 0 || selectedKeywords.some(kw => tags.includes(kw));
+                const matchActress = !actressVal || actress.includes(actressVal);
+
+                if (matchKeyword && matchActress) {
+                    card.style.display = 'flex';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+            visibleCountSpan.textContent = visibleCount;
+            emptyMsg.style.display = visibleCount === 0 ? 'block' : 'none';
+        }
+
+        function applySort() {
+            const isOldest = dateSort.value === 'oldest';
+            const sortedCards = cards.slice().sort((a, b) => {
+                const dateA = a.getAttribute('data-date') || '';
+                const dateB = b.getAttribute('data-date') || '';
+                return isOldest ? dateA.localeCompare(dateB) : dateB.localeCompare(dateA);
+            });
+            sortedCards.forEach(card => grid.appendChild(card));
+        }
+
+        function resetFilters() {
+            keywordCheckboxes.forEach(cb => cb.checked = false);
+            actressSelect.value = '';
+            dateSort.value = 'newest';
+            applySort();
+            applyFilter();
+        }
+
+        keywordCheckboxes.forEach(cb => cb.addEventListener('change', applyFilter));
+        actressSelect.addEventListener('change', applyFilter);
+        dateSort.addEventListener('change', () => { applySort(); applyFilter(); });
+    </script>
+</body>
+</html>
