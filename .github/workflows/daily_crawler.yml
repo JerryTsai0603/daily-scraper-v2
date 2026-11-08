@@ -2,9 +2,11 @@ name: Daily Video Scraper
 
 on:
   schedule:
-    # 每天定時自動執行一次（UTC 00:00，對應台灣時間早上 08:00）
-    - cron: '0 0 * * *'
-  workflow_dispatch: # 支援手動按鈕觸發執行
+    # 每天定時執行兩次：
+    # UTC 22:00 對應台灣時間 早上 06:00
+    # UTC 14:00 對應台灣時間 晚上 22:00
+    - cron: '0 14,22 * * *'
+  workflow_dispatch: # 支援在 GitHub 介面上手動點擊觸發
 
 permissions:
   contents: write # 允許 GitHub Actions 將更新後的資料庫與網頁推回儲存庫
