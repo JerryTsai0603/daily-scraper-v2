@@ -142,35 +142,4 @@ def generate_index_html():
                     <span class="badge actress-badge">👩 {actress_display}</span>
                     <span class="date">📅 {date_str}</span>
                 </div>
-                <div class="tags" title="{tags or ''}">🏷️ {tags or '無標籤'}</div>
-                <div class="footer">
-                    <a href="{video_url}" target="_blank" class="btn">前往觀看</a>
-                </div>
-            </div>
-        </div>
-        """
-
-    actress_options = "".join([f'<option value="{act.lower()}">{act}</option>' for act in sorted(all_actresses)])
-    
-    checkboxes_html = "".join([
-        f'<label class="checkbox-label"><input type="checkbox" name="keyword" value="{tag}"> {tag}</label>' 
-        for tag in sorted(all_tags_set)
-    ]) if all_tags_set else '<span style="color: #94a3b8; font-size: 0.85rem;">尚無標籤資料</span>'
-
-    html_content = f"""<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jable & MissAv 影片自動典藏庫 - 智慧篩選</title>
-    <style>
-        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0b0f19; color: #f8fafc; padding: 24px 16px; }}
-        .header {{ text-align: center; margin-bottom: 24px; }}
-        .header h1 {{ font-size: 1.8rem; color: #38bdf8; margin-bottom: 6px; }}
-        .header p {{ color: #94a3b8; font-size: 0.9rem; }}
-        .filter-panel {{ max-width: 1400px; margin: 0 auto 28px auto; background: #1e293b; padding: 18px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; flex-direction: column; gap: 16px; }}
-        .filter-row {{ display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between; }}
-        .filter-group {{ display: flex; flex-wrap: wrap; gap: 16px; align-items: center; flex-grow: 1; }}
-        .filter-item {{ display: flex; align-items: center; gap: 8px; }}
-        .filter-item label {{ font-size: 0.85rem; color: #
+                <div class="tags" title="{tags or ''
