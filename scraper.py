@@ -34,6 +34,7 @@ def init_db():
             tags TEXT,
             actress TEXT,
             video_url TEXT UNIQUE,
+            release_date TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -41,6 +42,8 @@ def init_db():
     columns = [col[1] for col in cursor.fetchall()]
     if "actress" not in columns:
         cursor.execute("ALTER TABLE videos ADD COLUMN actress TEXT")
+    if "release_date" not in columns:
+        cursor.execute("ALTER TABLE videos ADD COLUMN release_date TEXT")
     
     # 清理非影片的分類或無效路徑
     cursor.execute("""
@@ -57,21 +60,22 @@ def init_db():
     conn.commit()
     conn.close()
 
-def save_video(title, cover_url, tags, actress, video_url):
+def save_video(title, cover_url, tags, actress, video_url, release_date=""):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     try:
-        # 新增或更新資料，更新時同步刷新 created_at 確保網頁置頂顯示
+        # 新增或更新資料，更新時同步更新欄位並刷新 created_at
         cursor.execute("""
-            INSERT INTO videos (title, cover_url, tags, actress, video_url, created_at)
-            VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            INSERT INTO videos (title, cover_url, tags, actress, video_url, release_date, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ON CONFLICT(video_url) DO UPDATE SET
                 title = excluded.title,
                 cover_url = CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE videos.cover_url END,
                 tags = CASE WHEN excluded.tags != '' AND excluded.tags != '一般' THEN excluded.tags ELSE videos.tags END,
                 actress = CASE WHEN excluded.actress != '' AND excluded.actress != '未知' THEN excluded.actress ELSE videos.actress END,
+                release_date = CASE WHEN excluded.release_date != '' THEN excluded.release_date ELSE videos.release_date END,
                 created_at = CURRENT_TIMESTAMP
-        """, (title, cover_url, tags, actress, video_url))
+        """, (title, cover_url, tags, actress, video_url, release_date))
         conn.commit()
         return cursor.rowcount > 0
     finally:
@@ -80,8 +84,12 @@ def save_video(title, cover_url, tags, actress, video_url):
 def get_all_videos():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    # 依照最新收錄與更新時間由新到舊排序
-    cursor.execute("SELECT id, title, cover_url, tags, actress, video_url, created_at FROM videos ORDER BY created_at DESC, id DESC")
+    # 預設依爬取時間由新到舊排序
+    cursor.execute("""
+        SELECT id, title, cover_url, tags, actress, video_url, COALESCE(release_date, ''), created_at 
+        FROM videos 
+        ORDER BY created_at DESC, id DESC
+    """)
     rows = cursor.fetchall()
     conn.close()
     return rows
@@ -105,26 +113,27 @@ def sync_to_google_sheet(new_videos):
         existing_rows = sheet.get_all_values()
 
         if not existing_rows:
-            sheet.append_row(["標題", "女優", "標籤", "影片連結", "封面圖片", "抓取時間"])
+            sheet.append_row(["標題", "女優", "標籤", "發布日期", "影片連結", "封面圖片", "爬取時間"])
             existing_urls = set()
             current_row_index = 2
         else:
-            existing_urls = {row[3] for row in existing_rows[1:] if len(row) > 3}
+            # 兼容不同列位置，抓出所有已存在的影片 URL
+            existing_urls = {col for row in existing_rows[1:] for col in row if str(col).startswith('http')}
             current_row_index = len(existing_rows) + 1
 
         all_videos = get_all_videos()
         added_count = 0
 
         for v in all_videos:
-            vid_id, title, cover_url, tags, actress, video_url, created_at = v
+            vid_id, title, cover_url, tags, actress, video_url, release_date, created_at = v
             if video_url not in existing_urls:
                 image_formula = f'=IMAGE("{cover_url}")' if cover_url else ""
                 sheet.append_row([
-                    title, actress or "未知", tags or "", video_url, image_formula, created_at
+                    title, actress or "未知", tags or "", release_date or "", video_url, image_formula, created_at
                 ], value_input_option='USER_ENTERED')
                 
                 try:
-                    sheet.format(f"E{current_row_index}", {"textFormat": {"fontSize": 10}})
+                    sheet.format(f"F{current_row_index}", {"textFormat": {"fontSize": 10}})
                     sheet.update_row_height(current_row_index, 120)
                 except Exception:
                     pass
@@ -146,7 +155,7 @@ def generate_index_html():
     cards_html = ""
     
     for v in videos:
-        vid_id, title, cover_url, tags, actress, video_url, created_at = v
+        vid_id, title, cover_url, tags, actress, video_url, release_date, created_at = v
         actress_display = actress.strip() if actress and actress.strip() else "未知/多人"
         if actress:
             for act in actress.split(','):
@@ -160,18 +169,21 @@ def generate_index_html():
                 if cleaned_tag and cleaned_tag != "一般":
                     all_tags_set.add(cleaned_tag)
 
-        date_str = created_at[:10] if created_at else ""
+        crawled_date_str = created_at[:10] if created_at else ""
+        crawled_full = created_at if created_at else ""
+        release_date_str = release_date.strip() if release_date and release_date.strip() else crawled_date_str
         cover_img = cover_url if cover_url else "https://via.placeholder.com/300x180?text=No+Cover"
 
         cards_html += f"""
-        <div class="card" data-title="{title.lower()}" data-actress="{actress_display.lower()}" data-tags="{(tags or '').lower()}" data-date="{date_str}">
+        <div class="card" data-title="{title.lower()}" data-actress="{actress_display.lower()}" data-tags="{(tags or '').lower()}" data-release="{release_date_str}" data-crawled="{crawled_full}">
             <img src="{cover_img}" alt="封面" loading="lazy" referrerpolicy="no-referrer">
             <div class="card-body">
                 <div class="title" title="{title}">{title}</div>
                 <div class="meta-row">
                     <span class="badge actress-badge">👩 {actress_display}</span>
-                    <span class="date">📅 {date_str}</span>
+                    <span class="date" title="影片發布日期">📅 {release_date_str}</span>
                 </div>
+                <div class="crawled-time">🕒 爬取時間: {crawled_date_str}</div>
                 <div class="tags" title="{tags or ''}">🏷️ {tags or '無標籤'}</div>
                 <div class="footer">
                     <a href="{video_url}" target="_blank" class="btn">前往觀看</a>
@@ -216,9 +228,10 @@ def generate_index_html():
         .card img { width: 100%; height: 180px; object-fit: cover; background-color: #334155; }
         .card-body { padding: 14px; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; }
         .title { font-size: 0.95rem; font-weight: 600; line-height: 1.4; color: #f1f5f9; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 8px; }
-        .meta-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 0.75rem; }
+        .meta-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 0.75rem; }
+        .crawled-time { font-size: 0.72rem; color: #64748b; margin-bottom: 8px; }
         .actress-badge { background: #0284c7; color: white; padding: 2px 8px; border-radius: 4px; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .date { color: #64748b; }
+        .date { color: #94a3b8; }
         .tags { font-size: 0.75rem; color: #94a3b8; background: #0f172a; padding: 4px 8px; border-radius: 4px; margin-bottom: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .footer { display: flex; justify-content: flex-end; margin-top: auto; }
         .btn { background: #0284c7; color: #fff; text-decoration: none; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; font-weight: 500; }
@@ -253,10 +266,12 @@ def generate_index_html():
                     </select>
                 </div>
                 <div class="filter-item">
-                    <label for="date-sort">新增時間排序:</label>
-                    <select id="date-sort">
-                        <option value="newest">最新優先</option>
-                        <option value="oldest">較舊優先</option>
+                    <label for="sort-select">排序方式:</label>
+                    <select id="sort-select">
+                        <option value="crawled-desc" selected>爬取時間：最新 → 最舊 (預設)</option>
+                        <option value="crawled-asc">爬取時間：最舊 → 最新</option>
+                        <option value="release-desc">影片發布：最新 → 最舊</option>
+                        <option value="release-asc">影片發布：最舊 → 最新</option>
                     </select>
                 </div>
             </div>
@@ -269,7 +284,7 @@ def generate_index_html():
     <script>
         const keywordCheckboxes = document.querySelectorAll('input[name="keyword"]');
         const actressSelect = document.getElementById('actress-select');
-        const dateSort = document.getElementById('date-sort');
+        const sortSelect = document.getElementById('sort-select');
         const visibleCountSpan = document.getElementById('visible-count');
         const emptyMsg = document.getElementById('empty-msg');
         const grid = document.getElementById('video-grid');
@@ -301,11 +316,23 @@ def generate_index_html():
         }
 
         function applySort() {
-            const isOldest = dateSort.value === 'oldest';
+            const sortMode = sortSelect.value;
             const sortedCards = cards.slice().sort((a, b) => {
-                const dateA = a.getAttribute('data-date') || '';
-                const dateB = b.getAttribute('data-date') || '';
-                return isOldest ? dateA.localeCompare(dateB) : dateB.localeCompare(dateA);
+                const crawledA = a.getAttribute('data-crawled') || '';
+                const crawledB = b.getAttribute('data-crawled') || '';
+                const releaseA = a.getAttribute('data-release') || '';
+                const releaseB = b.getAttribute('data-release') || '';
+
+                if (sortMode === 'crawled-desc') {
+                    return crawledB.localeCompare(crawledA);
+                } else if (sortMode === 'crawled-asc') {
+                    return crawledA.localeCompare(crawledB);
+                } else if (sortMode === 'release-desc') {
+                    return releaseB.localeCompare(releaseA) || crawledB.localeCompare(crawledA);
+                } else if (sortMode === 'release-asc') {
+                    return releaseA.localeCompare(releaseB) || crawledA.localeCompare(crawledB);
+                }
+                return 0;
             });
             sortedCards.forEach(card => grid.appendChild(card));
         }
@@ -313,14 +340,18 @@ def generate_index_html():
         function resetFilters() {
             keywordCheckboxes.forEach(cb => cb.checked = false);
             actressSelect.value = '';
-            dateSort.value = 'newest';
+            sortSelect.value = 'crawled-desc';
             applySort();
             applyFilter();
         }
 
         keywordCheckboxes.forEach(cb => cb.addEventListener('change', applyFilter));
         actressSelect.addEventListener('change', applyFilter);
-        dateSort.addEventListener('change', () => { applySort(); applyFilter(); });
+        sortSelect.addEventListener('change', () => { applySort(); applyFilter(); });
+
+        // 預設載入套用排序
+        applySort();
+        applyFilter();
     </script>
 </body>
 </html>
@@ -372,7 +403,6 @@ async def is_cf_challenge(page):
         ]):
             return True
         
-        # 檢查 DOM 特徵
         cf_cnt = await page.locator(
             '#challenge-running, #challenge-form, #cf-turnstile, iframe[src*="challenges.cloudflare.com"], #cf-challenge-running'
         ).count()
@@ -454,7 +484,7 @@ async def safe_navigate(page, url, is_category=True, max_retries=2):
     return False
 
 def extract_field_after_label(soup, label):
-    """精準抓取指定標籤（如 '女優' 或 '類型'）後方的字串內容"""
+    """精準抓取指定標籤（如 '女優'、'類型' 或 '發行日期'）後方的字串內容"""
     pattern = re.compile(rf'{label}\s*[:：]')
     for node in soup.find_all(string=pattern):
         container = node.find_parent(['div', 'p', 'li', 'tr', 'section'])
@@ -475,8 +505,34 @@ def extract_field_after_label(soup, label):
             m = re.search(rf'{label}\s*[:：]\s*(.+)', text)
             if m:
                 val = m.group(1).strip()
-                val = re.split(r'\s+(?:類型|女優|番號|標籤|發行日期|導演|片商)[:：]', val)[0]
+                val = re.split(r'\s+(?:類型|女優|番號|標籤|發行日期|發布日期|導演|片商)[:：]', val)[0]
                 return val.strip()
+    return ""
+
+def extract_release_date(soup):
+    """通用抓取影片發布/發行日期"""
+    for label in ["發行日期", "發布日期", "上映日期", "更新日期"]:
+        val = extract_field_after_label(soup, label)
+        if val:
+            m = re.search(r'\b(20\d{2}[-/]\d{2}[-/]\d{2})\b', val)
+            if m:
+                return m.group(1).replace('/', '-')
+    
+    # 從 meta 標籤檢索
+    for prop in ["og:release_date", "video:release_date", "upload_date"]:
+        meta = soup.select_one(f'meta[property="{prop}"], meta[name="{prop}"]')
+        if meta and meta.get("content"):
+            m = re.search(r'\b(20\d{2}[-/]\d{2}[-/]\d{2})\b', meta["content"])
+            if m:
+                return m.group(1).replace('/', '-')
+
+    # 從日期文字節點檢索
+    for node in soup.find_all(string=re.compile(r'\b20\d{2}[-/]\d{2}[-/]\d{2}\b')):
+        text = node.strip()
+        if not any(k in text.lower() for k in ["copyright", "rights"]):
+            m = re.search(r'\b(20\d{2}[-/]\d{2}[-/]\d{2})\b', text)
+            if m:
+                return m.group(1).replace('/', '-')
     return ""
 
 async def run_scraper():
@@ -557,6 +613,7 @@ async def run_scraper():
 
                                 parts = video_title.split()
                                 actress_name = parts[-1].strip() if parts else "未知"
+                                release_date = extract_release_date(detail_soup)
 
                                 tag_links = detail_soup.select('h5.tags.h6-md a[href]')
                                 tags_list = []
@@ -573,12 +630,12 @@ async def run_scraper():
                                 tags_str = ", ".join(tags_list) if tags_list else "一般"
 
                                 if has_target_tag:
-                                    if save_video(video_title, cover_image_url, tags_str, actress_name, full_url):
+                                    if save_video(video_title, cover_image_url, tags_str, actress_name, full_url, release_date):
                                         newly_added_videos.append({
                                             "title": video_title, "cover_url": cover_image_url,
                                             "tags": tags_str, "actress": actress_name, "video_url": full_url
                                         })
-                                        print(f"  🎯 [Jable 收錄] {video_title} (標籤: {tags_str})")
+                                        print(f"  🎯 [Jable 收錄] {video_title} (發布: {release_date or '未知'}) (標籤: {tags_str})")
                             except Exception:
                                 continue
 
@@ -647,7 +704,10 @@ async def run_scraper():
                             actresses = [a.text.strip() for a in actress_elems if a.text.strip()]
                             actress_name = ", ".join(list(dict.fromkeys(actresses))) if actresses else "未知"
 
-                        # 4. 類型標籤：抓取「類型: 」後面的字串
+                        # 4. 發布日期：抓取「發行日期: 」後面的字串
+                        release_date = extract_field_after_label(detail_soup, "發行日期") or extract_release_date(detail_soup)
+
+                        # 5. 類型標籤：抓取「類型: 」後面的字串
                         tags_str = extract_field_after_label(detail_soup, "類型")
                         if not tags_str:
                             genre_elems = detail_soup.select('a[href*="/genres/"]')
@@ -666,12 +726,12 @@ async def run_scraper():
                                     break
 
                         if has_genre_match:
-                            if save_video(video_title, cover_image_url, tags_str, actress_name, video_url):
+                            if save_video(video_title, cover_image_url, tags_str, actress_name, video_url, release_date):
                                 newly_added_videos.append({
                                     "title": video_title, "cover_url": cover_image_url,
                                     "tags": tags_str, "actress": actress_name, "video_url": video_url
                                 })
-                                print(f"  🎯 [MissAv 成功收錄] {video_title} (女優: {actress_name}) (類型: {tags_str})")
+                                print(f"  🎯 [MissAv 成功收錄] {video_title} (女優: {actress_name}) (發布: {release_date or '未知'}) (類型: {tags_str})")
                         else:
                             print(f"  ⚪ [MissAv 未符合] {video_title} (類型: {tags_str})")
 
