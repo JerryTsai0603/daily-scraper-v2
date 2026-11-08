@@ -1,3 +1,10 @@
+這是因為字串拼接的括號在複製貼上時漏掉了結尾的右括號 `)`。
+
+為了百分之百避免任何縮排或括號語法錯誤，我們改回最穩定、乾淨的 **f-string 多行字串**，並且將 CSS 與 JS 的雙大括號跳脫處理（`{{` 與 `}}`），這樣 Python 就絕對不會把它們誤認為變數。
+
+請直接將以下**完整無誤的 `scraper.py**` 複製並覆蓋到您的專案中：
+
+```python
 import os
 import json
 import asyncio
@@ -169,4 +176,333 @@ def generate_index_html():
         .header {{ text-align: center; margin-bottom: 24px; }}
         .header h1 {{ font-size: 1.8rem; color: #38bdf8; margin-bottom: 6px; }}
         .header p {{ color: #94a3b8; font-size: 0.9rem; }}
-        .filter-panel {{ max-width: 1400px; margin: 0 auto 28px auto; background: #1e293b; padding: 18px; border
+        .filter-panel {{ max-width: 1400px; margin: 0 auto 28px auto; background: #1e293b; padding: 18px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; flex-direction: column; gap: 16px; }}
+        .filter-row {{ display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between; }}
+        .filter-group {{ display: flex; flex-wrap: wrap; gap: 16px; align-items: center; flex-grow: 1; }}
+        .filter-item {{ display: flex; align-items: center; gap: 8px; }}
+        .filter-item label {{ font-size: 0.85rem; color: #94a3b8; }}
+        .filter-item select {{ background: #0f172a; border: 1px solid #334155; color: #f1f5f9; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; outline: none; }}
+        .checkbox-container {{ display: flex; flex-wrap: wrap; gap: 12px; align-items: center; background: #0f172a; padding: 10px 14px; border-radius: 6px; border: 1px solid #334155; max-height: 140px; overflow-y: auto; flex-grow: 1; }}
+        .checkbox-label {{ font-size: 0.85rem; color: #cbd5e1; display: flex; align-items: center; gap: 4px; cursor: pointer; }}
+        .checkbox-label input {{ cursor: pointer; }}
+        .reset-btn {{ background: #475569; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }}
+        .reset-btn:hover {{ background: #64748b; }}
+        .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; max-width: 1400px; margin: 0 auto; }}
+        .card {{ background: #1e293b; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3); display: flex; flex-direction: column; transition: transform 0.2s; }}
+        .card:hover {{ transform: translateY(-4px); }}
+        .card img {{ width: 100%; height: 180px; object-fit: cover; background-color: #334155; }}
+        .card-body {{ padding: 14px; flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; }}
+        .title {{ font-size: 0.95rem; font-weight: 600; line-height: 1.4; color: #f1f5f9; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 8px; }}
+        .meta-row {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 0.75rem; }}
+        .actress-badge {{ background: #0284c7; color: white; padding: 2px 8px; border-radius: 4px; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+        .date {{ color: #64748b; }}
+        .tags {{ font-size: 0.75rem; color: #94a3b8; background: #0f172a; padding: 4px 8px; border-radius: 4px; margin-bottom: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+        .footer {{ display: flex; justify-content: flex-end; margin-top: auto; }}
+        .btn {{ background: #0284c7; color: #fff; text-decoration: none; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; font-weight: 500; }}
+        .btn:hover {{ background: #0369a1; }}
+        .empty-msg {{ text-align: center; grid-column: 1 / -1; color: #94a3b8; padding: 40px; font-size: 1rem; display: none; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Jable & MissAv 影片自動典藏庫</h1>
+        <p>目前庫存 <span id="total-count">{len(videos)}</span> 部影片 | 篩選顯示 <span id="visible-count">{len(videos)}</span> 部</p>
+    </div>
+    <div class="filter-panel">
+        <div class="filter-row">
+            <div class="filter-group">
+                <div class="filter-item" style="width: 100%;">
+                    <label style="min-width: 80px;">Tags 複選:</label>
+                    <div class="checkbox-container">
+                        {checkboxes_html}
+                    </div>
+                </div>
+            </div>
+            <button class="reset-btn" onclick="resetFilters()">重設條件</button>
+        </div>
+        <div class="filter-row">
+            <div class="filter-group">
+                <div class="filter-item">
+                    <label for="actress-select">女優篩選:</label>
+                    <select id="actress-select">
+                        <option value="">全部女優</option>
+                        {actress_options}
+                    </select>
+                </div>
+                <div class="filter-item">
+                    <label for="date-sort">新增時間排序:</label>
+                    <select id="date-sort">
+                        <option value="newest">最新優先</option>
+                        <option value="oldest">較舊優先</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="grid" id="video-grid">
+        {cards_html}
+        <div class="empty-msg" id="empty-msg">查無符合條件的影片</div>
+    </div>
+    <script>
+        const keywordCheckboxes = document.querySelectorAll('input[name="keyword"]');
+        const actressSelect = document.getElementById('actress-select');
+        const dateSort = document.getElementById('date-sort');
+        const visibleCountSpan = document.getElementById('visible-count');
+        const emptyMsg = document.getElementById('empty-msg');
+        const grid = document.getElementById('video-grid');
+        const cards = Array.from(document.querySelectorAll('.card'));
+
+        function applyFilter() {{
+            const selectedKeywords = Array.from(keywordCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value.toLowerCase());
+            const actressVal = actressSelect.value.trim().toLowerCase();
+            
+            let visibleCount = 0;
+            cards.forEach(card => {{
+                const actress = card.getAttribute('data-actress') || '';
+                const tags = card.getAttribute('data-tags') || '';
+                
+                const matchKeyword = selectedKeywords.length === 0 || selectedKeywords.some(kw => tags.includes(kw));
+                const matchActress = !actressVal || actress.includes(actressVal);
+
+                if (matchKeyword && matchActress) {{
+                    card.style.display = 'flex';
+                    visibleCount++;
+                }} else {{
+                    card.style.display = 'none';
+                }}
+            }});
+            visibleCountSpan.textContent = visibleCount;
+            emptyMsg.style.display = visibleCount === 0 ? 'block' : 'none';
+        }}
+
+        function applySort() {{
+            const isOldest = dateSort.value === 'oldest';
+            const sortedCards = cards.slice().sort((a, b) => {{
+                const dateA = a.getAttribute('data-date') || '';
+                const dateB = b.getAttribute('data-date') || '';
+                return isOldest ? dateA.localeCompare(dateB) : dateB.localeCompare(dateA);
+            }});
+            sortedCards.forEach(card => grid.appendChild(card));
+        }}
+
+        function resetFilters() {{
+            keywordCheckboxes.forEach(cb => cb.checked = false);
+            actressSelect.value = '';
+            dateSort.value = 'newest';
+            applySort();
+            applyFilter();
+        }}
+
+        keywordCheckboxes.forEach(cb => cb.addEventListener('change', applyFilter));
+        actressSelect.addEventListener('change', applyFilter);
+        dateSort.addEventListener('change', () => {{ applySort(); applyFilter(); }});
+    </script>
+</body>
+</html>
+"""
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(html_content)
+    print(f"✅ 已成功產出最新動態 index.html（共收錄 {len(videos)} 部影片）")
+
+def send_email_report(new_videos):
+    if not new_videos or not SENDER_EMAIL or not SENDER_PASSWORD:
+        return
+    subject = f"【每日影片爬蟲報告】今日新增 {len(new_videos)} 部符合條件的影片"
+    items_html = "".join([
+        f"""<div style="border:1px solid #e2e8f0; border-radius:8px; padding:12px; margin-bottom:12px;">
+            <img src="{v['cover_url']}" style="width:160px; height:100px; object-fit:cover; border-radius:4px;" referrerpolicy="no-referrer">
+            <h4 style="margin:6px 0;">{v['title']} (女優: {v['actress']})</h4>
+            <a href="{v['video_url']}" target="_blank">前往觀看</a>
+        </div>""" for v in new_videos
+    ])
+    html_content = f"<h2>今日更新通知</h2><p>本次新增 <strong>{len(new_videos)}</strong> 部：</p>{items_html}"
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = SENDER_EMAIL
+    msg["To"] = RECIPIENT_EMAIL
+    msg.attach(MIMEText(html_content, "html", "utf-8"))
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, msg.as_string())
+        print("✅ 郵件寄送成功！")
+    except Exception as e:
+        print(f"❌ 郵件寄送失敗: {e}")
+
+async def wait_until_cf_cleared(page, is_category_page=True, max_wait_sec=35):
+    for _ in range(max_wait_sec):
+        title = await page.title()
+        title_lower = title.lower()
+        is_cf = any(k in title_lower for k in [
+            "just a moment", "請稍候", "请稍候", "checking your browser",
+            "challenge", "cloudflare", "attention required"
+        ])
+        if is_cf:
+            await page.wait_for_timeout(1000)
+            continue
+        return True
+    return False
+
+async def safe_navigate(page, url, is_category=True):
+    try:
+        await page.goto(url, timeout=60000, wait_until="domcontentloaded")
+        await wait_until_cf_cleared(page, is_category_page=is_category, max_wait_sec=35)
+        await page.wait_for_timeout(2000)
+        return True
+    except Exception as e:
+        print(f"    ⚠️ 導航失敗 ({url}): {e}")
+        return False
+
+async def run_scraper():
+    init_db()
+    jable_target_paths = ["/tags/pantyhose/", "/tags/black-pantyhose/", "/tags/footjob/"]
+    missav_target_keywords = ["ol", "絲襪", "腳交", "戀足", "pantyhose", "footjob"]
+
+    seen_urls = set()
+    newly_added_videos = []
+
+    async with Stealth().use_async(async_playwright()) as p:
+        try:
+            browser = await p.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-infobars"]
+            )
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                viewport={"width": 1920, "height": 1080},
+                locale="zh-TW"
+            )
+            page = await context.new_page()
+
+            # ==========================================
+            # 1️⃣ 爬取 Jable.tv (前 2 頁)
+            # ==========================================
+            print("🌐 開始掃描 Jable.tv...")
+            for page_num in range(1, 3):
+                target_url = "https://jable.tv/categories/chinese-subtitle/" if page_num == 1 else f"https://jable.tv/categories/chinese-subtitle/{page_num}/"
+                print(f"正在掃描 Jable 第 {page_num}/2 頁: {target_url}")
+
+                await safe_navigate(page, target_url, is_category=True)
+
+                for _ in range(4):
+                    await page.evaluate("window.scrollTo(0, document.body.scrollHeight);")
+                    await page.wait_for_timeout(1500)
+
+                soup = BeautifulSoup(await page.content(), 'html.parser')
+                video_boxes = soup.select('.video-img-box')
+                print(f"  -> Jable 第 {page_num} 頁抓到 {len(video_boxes)} 個影片方塊")
+
+                for box in video_boxes:
+                    link_elem = box.find('a', href=True)
+                    if link_elem and '/videos/' in link_elem['href']:
+                        full_url = link_elem['href'] if link_elem['href'].startswith('http') else f"https://jable.tv{link_elem['href']}"
+                        if full_url not in seen_urls:
+                            seen_urls.add(full_url)
+                            try:
+                                await safe_navigate(page, full_url, is_category=False)
+                                detail_soup = BeautifulSoup(await page.content(), 'html.parser')
+                                title_elem = detail_soup.select_one('h4') or detail_soup.select_one('h1') or detail_soup.find('title')
+                                video_title = title_elem.text.strip().replace(" - Jable.tv", "").strip() if title_elem else "未知標題"
+
+                                img_meta = detail_soup.select_one('meta[property="og:image"]')
+                                cover_image_url = img_meta.get('content') if img_meta else ""
+
+                                parts = video_title.split()
+                                actress_name = parts[-1].strip() if parts else "未知"
+
+                                tag_links = detail_soup.select('h5.tags.h6-md a[href]')
+                                tags_list = []
+                                has_target_tag = False
+
+                                for a_elem in tag_links:
+                                    href = a_elem.get('href', '')
+                                    t_text = a_elem.text.strip()
+                                    if t_text and "此作品曾在本站上傳" not in t_text:
+                                        tags_list.append(t_text)
+                                    if any(path in href for path in jable_target_paths):
+                                        has_target_tag = True
+
+                                tags_str = ", ".join(tags_list) if tags_list else "一般"
+
+                                if has_target_tag:
+                                    if save_video(video_title, cover_image_url, tags_str, actress_name, full_url):
+                                        newly_added_videos.append({
+                                            "title": video_title, "cover_url": cover_image_url,
+                                            "tags": tags_str, "actress": actress_name, "video_url": full_url
+                                        })
+                                        print(f"  🎯 [Jable 收錄] {video_title} (標籤: {tags_str})")
+                            except Exception as e:
+                                continue
+
+            # ==========================================
+            # 2️⃣ 爬取 MissAv (每次往後爬兩個頁面: 第 1 頁與第 2 頁)
+            # ==========================================
+            print("🌐 開始掃描 MissAv (https://missav.ws/dm278/chinese-subtitle)...")
+            for page_num in range(1, 3):
+                missav_url = "https://missav.ws/dm278/chinese-subtitle" if page_num == 1 else f"https://missav.ws/dm278/chinese-subtitle?page={page_num}"
+                print(f"正在掃描 MissAv 第 {page_num}/2 頁: {missav_url}")
+
+                await safe_navigate(page, missav_url, is_category=True)
+
+                for _ in range(4):
+                    await page.evaluate("window.scrollTo(0, document.body.scrollHeight);")
+                    await page.wait_for_timeout(1500)
+
+                soup = BeautifulSoup(await page.content(), 'html.parser')
+                missav_links = []
+                for a in soup.find_all('a', href=True):
+                    href = a['href']
+                    if '/cn/' in href and href not in missav_links and len(href.split('/')[-1]) > 3:
+                        full_url = href if href.startswith('http') else f"https://missav.ws{href}"
+                        if full_url not in seen_urls:
+                            seen_urls.add(full_url)
+                            missav_links.append(full_url)
+
+                print(f"  -> MissAv 第 {page_num} 頁抓到 {len(missav_links)} 個影片連結")
+
+                for video_url in missav_links:
+                    try:
+                        await safe_navigate(page, video_url, is_category=False)
+                        detail_soup = BeautifulSoup(await page.content(), 'html.parser')
+                        
+                        title_elem = detail_soup.select_one('h1') or detail_soup.find('title')
+                        video_title = title_elem.text.strip().replace(" - MissAV", "").strip() if title_elem else "未知標題"
+
+                        img_meta = detail_soup.select_one('meta[property="og:image"]')
+                        cover_image_url = img_meta.get('content') if img_meta else ""
+
+                        page_text = detail_soup.get_text().lower()
+                        tags_elements = detail_soup.select('a[href*="/genres/"], a[href*="/tags/"]')
+                        tags_list = [t.text.strip() for t in tags_elements if t.text.strip()]
+                        tags_str = ", ".join(tags_list) if tags_list else "一般"
+
+                        has_missav_match = any(kw in page_text for kw in missav_target_keywords) or any(any(kw in t.lower() for kw in missav_target_keywords) for t in tags_list)
+
+                        if has_missav_match:
+                            if save_video(video_title, cover_image_url, tags_str, "未知", video_url):
+                                newly_added_videos.append({
+                                    "title": video_title, "cover_url": cover_image_url,
+                                    "tags": tags_str, "actress": "未知", "video_url": video_url
+                                })
+                                print(f"  🎯 [MissAv 收錄] {video_title} (標籤: {tags_str})")
+                    except Exception as e:
+                        continue
+
+            print(f"✅ 雙平台爬取結束！總共新收錄 {len(newly_added_videos)} 部影片")
+            
+            sync_to_google_sheet(newly_added_videos)
+            generate_index_html()
+            send_email_report(newly_added_videos)
+
+        finally:
+            if 'browser' in locals() and browser:
+                await browser.close()
+
+if __name__ == "__main__":
+    asyncio.run(run_scraper())
+
+```
