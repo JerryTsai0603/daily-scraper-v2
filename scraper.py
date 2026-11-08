@@ -117,8 +117,7 @@ def generate_index_html():
     videos = get_all_videos()
     all_actresses = set()
     all_tags_set = set()
-    cards_list = []
-
+    cards_html = ""
     for v in reversed(videos):
         vid_id, title, cover_url, tags, actress, video_url, created_at = v
         actress_display = actress.strip() if actress and actress.strip() else "未知/多人"
@@ -135,25 +134,23 @@ def generate_index_html():
         date_str = created_at[:10] if created_at else ""
         cover_img = cover_url if cover_url else "https://via.placeholder.com/300x180?text=No+Cover"
 
-        card_html = (
-            f'<div class="card" data-title="{title.lower()}" data-actress="{actress_display.lower()}" data-tags="{(tags or "").lower()}" data-date="{date_str}">'
-            f'<img src="{cover_img}" alt="封面" loading="lazy" referrerpolicy="no-referrer">'
-            f'<div class="card-body">'
-            f'<div class="title" title="{title}">{title}</div>'
-            f'<div class="meta-row">'
-            f'<span class="badge actress-badge">👩 {actress_display}</span>'
-            f'<span class="date">📅 {date_str}</span>'
-            f'</div>'
-            f'<div class="tags" title="{tags or ""}">🏷️ {tags or "無標籤"}</div>'
-            f'<div class="footer">'
-            f'<a href="{video_url}" target="_blank" class="btn">前往觀看</a>'
-            f'</div>'
-            f'</div>'
-            f'</div>'
-        )
-        cards_list.append(card_html)
+        cards_html += f"""
+        <div class="card" data-title="{title.lower()}" data-actress="{actress_display.lower()}" data-tags="{(tags or '').lower()}" data-date="{date_str}">
+            <img src="{cover_img}" alt="封面" loading="lazy" referrerpolicy="no-referrer">
+            <div class="card-body">
+                <div class="title" title="{title}">{title}</div>
+                <div class="meta-row">
+                    <span class="badge actress-badge">👩 {actress_display}</span>
+                    <span class="date">📅 {date_str}</span>
+                </div>
+                <div class="tags" title="{tags or ''}">🏷️ {tags or '無標籤'}</div>
+                <div class="footer">
+                    <a href="{video_url}" target="_blank" class="btn">前往觀看</a>
+                </div>
+            </div>
+        </div>
+        """
 
-    cards_html = "".join(cards_list)
     actress_options = "".join([f'<option value="{act.lower()}">{act}</option>' for act in sorted(all_actresses)])
     
     checkboxes_html = "".join([
@@ -362,4 +359,150 @@ async def safe_navigate(page, url, is_category=True):
 
 async def run_scraper():
     init_db()
-    jable_target_paths = ["/tags/pantyhose/", "/tags/black-p
+    jable_target_paths = ["/tags/pantyhose/", "/tags/black-pantyhose/", "/tags/footjob/"]
+    missav_target_keywords = ["ol", "絲襪", "腳交", "戀足", "pantyhose", "footjob"]
+
+    seen_urls = set()
+    newly_added_videos = []
+
+    async with Stealth().use_async(async_playwright()) as p:
+        try:
+            browser = await p.chromium.launch(
+                headless=True,
+                args=["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-infobars"]
+            )
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                viewport={"width": 1920, "height": 1080},
+                locale="zh-TW"
+            )
+            page = await context.new_page()
+
+            # ==========================================
+            # 1️⃣ 爬取 Jable.tv (前 2 頁)
+            # ==========================================
+            print("🌐 開始掃描 Jable.tv...")
+            for page_num in range(1, 3):
+                target_url = "https://jable.tv/categories/chinese-subtitle/" if page_num == 1 else f"https://jable.tv/categories/chinese-subtitle/{page_num}/"
+                print(f"正在掃描 Jable 第 {page_num}/2 頁: {target_url}")
+
+                await safe_navigate(page, target_url, is_category=True)
+
+                for _ in range(4):
+                    await page.evaluate("window.scrollTo(0, document.body.scrollHeight);")
+                    await page.wait_for_timeout(1500)
+
+                soup = BeautifulSoup(await page.content(), 'html.parser')
+                video_boxes = soup.select('.video-img-box')
+                print(f"  -> Jable 第 {page_num} 頁抓到 {len(video_boxes)} 個影片方塊")
+
+                for box in video_boxes:
+                    link_elem = box.find('a', href=True)
+                    if link_elem and '/videos/' in link_elem['href']:
+                        full_url = link_elem['href'] if link_elem['href'].startswith('http') else f"https://jable.tv{link_elem['href']}"
+                        if full_url not in seen_urls:
+                            seen_urls.add(full_url)
+                            try:
+                                await safe_navigate(page, full_url, is_category=False)
+                                detail_soup = BeautifulSoup(await page.content(), 'html.parser')
+                                title_elem = detail_soup.select_one('h4') or detail_soup.select_one('h1') or detail_soup.find('title')
+                                video_title = title_elem.text.strip().replace(" - Jable.tv", "").strip() if title_elem else "未知標題"
+
+                                img_meta = detail_soup.select_one('meta[property="og:image"]')
+                                cover_image_url = img_meta.get('content') if img_meta else ""
+
+                                parts = video_title.split()
+                                actress_name = parts[-1].strip() if parts else "未知"
+
+                                tag_links = detail_soup.select('h5.tags.h6-md a[href]')
+                                tags_list = []
+                                has_target_tag = False
+
+                                for a_elem in tag_links:
+                                    href = a_elem.get('href', '')
+                                    t_text = a_elem.text.strip()
+                                    if t_text and "此作品曾在本站上傳" not in t_text:
+                                        tags_list.append(t_text)
+                                    if any(path in href for path in jable_target_paths):
+                                        has_target_tag = True
+
+                                tags_str = ", ".join(tags_list) if tags_list else "一般"
+
+                                if has_target_tag:
+                                    if save_video(video_title, cover_image_url, tags_str, actress_name, full_url):
+                                        newly_added_videos.append({
+                                            "title": video_title, "cover_url": cover_image_url,
+                                            "tags": tags_str, "actress": actress_name, "video_url": full_url
+                                        })
+                                        print(f"  🎯 [Jable 收錄] {video_title} (標籤: {tags_str})")
+                            except Exception as e:
+                                continue
+
+            # ==========================================
+            # 2️⃣ 爬取 MissAv (每次往後爬兩個頁面: 第 1 頁與第 2 頁)
+            # ==========================================
+            print("🌐 開始掃描 MissAv (https://missav.ws/dm278/chinese-subtitle)...")
+            for page_num in range(1, 3):
+                missav_url = "https://missav.ws/dm278/chinese-subtitle" if page_num == 1 else f"https://missav.ws/dm278/chinese-subtitle?page={page_num}"
+                print(f"正在掃描 MissAv 第 {page_num}/2 頁: {missav_url}")
+
+                await safe_navigate(page, missav_url, is_category=True)
+
+                for _ in range(4):
+                    await page.evaluate("window.scrollTo(0, document.body.scrollHeight);")
+                    await page.wait_for_timeout(1500)
+
+                soup = BeautifulSoup(await page.content(), 'html.parser')
+                missav_links = []
+                
+                # 🎯 使用精準正規表達式過濾 MissAv 影片連結，排除導覽與分頁
+                for a in soup.find_all('a', href=True):
+                    href = a['href']
+                    if re.search(r'/cn/[a-zA-Z0-9]+-[a-zA-Z0-9-]+', href):
+                        full_url = href if href.startswith('http') else f"https://missav.ws{href}"
+                        if full_url not in seen_urls:
+                            seen_urls.add(full_url)
+                            missav_links.append(full_url)
+
+                print(f"  -> MissAv 第 {page_num} 頁精準抓到 {len(missav_links)} 個影片連結")
+
+                for video_url in missav_links:
+                    try:
+                        await safe_navigate(page, video_url, is_category=False)
+                        detail_soup = BeautifulSoup(await page.content(), 'html.parser')
+                        
+                        title_elem = detail_soup.select_one('h1') or detail_soup.find('title')
+                        video_title = title_elem.text.strip().replace(" - MissAV", "").strip() if title_elem else "未知標題"
+
+                        img_meta = detail_soup.select_one('meta[property="og:image"]')
+                        cover_image_url = img_meta.get('content') if img_meta else ""
+
+                        page_text = detail_soup.get_text().lower()
+                        tags_elements = detail_soup.select('a[href*="/genres/"], a[href*="/tags/"]')
+                        tags_list = [t.text.strip() for t in tags_elements if t.text.strip()]
+                        tags_str = ", ".join(tags_list) if tags_list else "一般"
+
+                        has_missav_match = any(kw in page_text for kw in missav_target_keywords) or any(any(kw in t.lower() for kw in missav_target_keywords) for t in tags_list)
+
+                        if has_missav_match:
+                            if save_video(video_title, cover_image_url, tags_str, "未知", video_url):
+                                newly_added_videos.append({
+                                    "title": video_title, "cover_url": cover_image_url,
+                                    "tags": tags_str, "actress": "未知", "video_url": video_url
+                                })
+                                print(f"  🎯 [MissAv 收錄] {video_title} (標籤: {tags_str})")
+                    except Exception as e:
+                        continue
+
+            print(f"✅ 雙平台爬取結束！總共新收錄 {len(newly_added_videos)} 部影片")
+            
+            sync_to_google_sheet(newly_added_videos)
+            generate_index_html()
+            send_email_report(newly_added_videos)
+
+        finally:
+            if 'browser' in locals() and browser:
+                await browser.close()
+
+if __name__ == "__main__":
+    asyncio.run(run_scraper())
