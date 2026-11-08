@@ -122,7 +122,7 @@ def generate_index_html():
         vid_id, title, cover_url, tags, actress, video_url, created_at = v
         actress_display = actress.strip() if actress and actress.strip() else "未知/多人"
         if actress:
-            for act in actress.split():
+            for act in actress.split(','):
                 if act.strip():
                     all_actresses.add(act.strip())
         
@@ -255,7 +255,7 @@ def generate_index_html():
             let visibleCount = 0;
             cards.forEach(card => {
                 const actress = card.getAttribute('data-actress') || '';
-                const tags = card.getAttribute('data-tags'] || '';
+                const tags = card.getAttribute('data-tags') || '';
                 
                 const matchKeyword = selectedKeywords.length === 0 || selectedKeywords.some(kw => tags.includes(kw));
                 const matchActress = !actressVal || actress.includes(actressVal);
@@ -275,7 +275,7 @@ def generate_index_html():
             const isOldest = dateSort.value === 'oldest';
             const sortedCards = cards.slice().sort((a, b) => {
                 const dateA = a.getAttribute('data-date') || '';
-                const dateB = b.getAttribute('data-date'] || '';
+                const dateB = b.getAttribute('data-date') || '';
                 return isOldest ? dateA.localeCompare(dateB) : dateB.localeCompare(dateA);
             });
             sortedCards.forEach(card => grid.appendChild(card));
@@ -360,6 +360,7 @@ async def safe_navigate(page, url, is_category=True):
 async def run_scraper():
     init_db()
     jable_target_paths = ["/tags/pantyhose/", "/tags/black-pantyhose/", "/tags/footjob/"]
+    # 🎯 MissAv 條件標籤：OL, 絲襪, 腳交, 戀足
     missav_target_keywords = ["ol", "絲襪", "腳交", "戀足", "pantyhose", "footjob"]
 
     seen_urls = set()
@@ -455,10 +456,10 @@ async def run_scraper():
                 soup = BeautifulSoup(await page.content(), 'html.parser')
                 missav_links = []
                 
-                # 🎯 MissAv 影片網址通常包含英文代碼與連字號（例如 /cn/abp-123 或 /dm278/abp-123）
+                # 🎯 精準擷取 MissAv 影片內頁連結
                 for a in soup.find_all('a', href=True):
                     href = a['href']
-                    if re.search(r'/[a-zA-Z0-9]+-[a-zA-Z0-9-]+', href) and 'chinese-subtitle' not in href and 'page=' not in href:
+                    if re.search(r'/[a-zA-Z0-9]+-[a-zA-Z0-9-]+', href) and 'chinese-subtitle' not in href and 'page=' not in href and 'genres' not in href:
                         full_url = href if href.startswith('http') else f"https://missav.ws{href}"
                         if full_url not in seen_urls:
                             seen_urls.add(full_url)
@@ -471,12 +472,20 @@ async def run_scraper():
                         await safe_navigate(page, video_url, is_category=False)
                         detail_soup = BeautifulSoup(await page.content(), 'html.parser')
                         
+                        # 🎯 抓取標題
                         title_elem = detail_soup.select_one('h1') or detail_soup.find('title')
                         video_title = title_elem.text.strip().replace(" - MissAV", "").strip() if title_elem else "未知標題"
 
+                        # 🎯 抓取封面圖片
                         img_meta = detail_soup.select_one('meta[property="og:image"]')
                         cover_image_url = img_meta.get('content') if img_meta else ""
 
+                        # 🎯 抓取女優名稱
+                        actress_elems = detail_soup.select('a[href*="/actresses/"]')
+                        actresses = [a.text.strip() for a in actress_elems if a.text.strip()]
+                        actress_name = ", ".join(actresses) if actresses else "未知"
+
+                        # 🎯 抓取標籤並檢查是否符合 OL、絲襪、戀足、腳交 等條件
                         page_text = detail_soup.get_text().lower()
                         tags_elements = detail_soup.select('a[href*="/genres/"], a[href*="/tags/"]')
                         tags_list = [t.text.strip() for t in tags_elements if t.text.strip()]
@@ -485,12 +494,12 @@ async def run_scraper():
                         has_missav_match = any(kw in page_text for kw in missav_target_keywords) or any(any(kw in t.lower() for kw in missav_target_keywords) for t in tags_list)
 
                         if has_missav_match:
-                            if save_video(video_title, cover_image_url, tags_str, "未知", video_url):
+                            if save_video(video_title, cover_image_url, tags_str, actress_name, video_url):
                                 newly_added_videos.append({
                                     "title": video_title, "cover_url": cover_image_url,
-                                    "tags": tags_str, "actress": "未知", "video_url": video_url
+                                    "tags": tags_str, "actress": actress_name, "video_url": video_url
                                 })
-                                print(f"  🎯 [MissAv 收錄] {video_title} (標籤: {tags_str})")
+                                print(f"  🎯 [MissAv 收錄] {video_title} (女優: {actress_name}) (標籤: {tags_str})")
                     except Exception as e:
                         continue
 
