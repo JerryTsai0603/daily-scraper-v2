@@ -37,7 +37,7 @@ def init_db():
     if "actress" not in columns:
         cursor.execute("ALTER TABLE videos ADD COLUMN actress TEXT")
     
-    # 🧹 清理先前非影片的分類或無效紀錄
+    # 清理非影片的分類或無效路徑，保留所有正常影片
     cursor.execute("""
         DELETE FROM videos 
         WHERE video_url LIKE '%/dm278%' 
@@ -56,7 +56,7 @@ def save_video(title, cover_url, tags, actress, video_url):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     try:
-        # 使用 ON CONFLICT DO UPDATE，若已有紀錄且先前資料為「未知」或「一般」，自動更新為最新精準抓取的內容
+        # 若已有紀錄但先前欄位為未知，自動更新為最新資料
         cursor.execute("""
             INSERT INTO videos (title, cover_url, tags, actress, video_url)
             VALUES (?, ?, ?, ?, ?)
@@ -80,6 +80,7 @@ def get_all_videos():
     return rows
 
 def sync_to_google_sheet(new_videos):
+    """同步資料至 Google 試算表並設定圖片欄高 120px"""
     creds_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
     sheet_id = os.getenv("GOOGLE_SHEET_ID")
 
@@ -129,7 +130,7 @@ def sync_to_google_sheet(new_videos):
         else:
             print("✅ Google 試算表已包含所有資料庫影片，無需同步。")
     except Exception as e:
-        print(f"❌ 同步 Google 試算表失敗 (略過以繼續執行): {e}")
+        print(f"❌ 同步 Google 試算表失敗: {e}")
 
 def generate_index_html():
     videos = get_all_videos()
@@ -353,7 +354,8 @@ def send_email_report(new_videos):
     except Exception as e:
         print(f"❌ 郵件寄送失敗: {e}")
 
-async def wait_until_cf_cleared(page, is_category_page=True, max_wait_sec=35):
+async def wait_until_cf_cleared(page, max_wait_sec=40):
+    """等待 Cloudflare 驗證盾通過"""
     for _ in range(max_wait_sec):
         title = await page.title()
         title_lower = title.lower()
@@ -361,29 +363,37 @@ async def wait_until_cf_cleared(page, is_category_page=True, max_wait_sec=35):
             "just a moment", "請稍候", "请稍候", "checking your browser",
             "challenge", "cloudflare", "attention required"
         ])
-        if is_cf:
-            await page.wait_for_timeout(1000)
-            continue
-        return True
+        if not is_cf and title.strip():
+            return True
+        await page.wait_for_timeout(1000)
     return False
 
 async def safe_navigate(page, url, is_category=True):
     try:
         await page.goto(url, timeout=60000, wait_until="domcontentloaded")
-        await wait_until_cf_cleared(page, is_category_page=is_category, max_wait_sec=35)
-        await page.wait_for_timeout(2000)
+        cleared = await wait_until_cf_cleared(page, max_wait_sec=40)
+        
+        if not cleared:
+            print(f"    ⚠️ Cloudflare 驗證超時 ({url})，當前標題: '{await page.title()}'")
+            return False
+
+        # 若是清單分類頁，顯式等待影片卡片出現
+        if is_category:
+            try:
+                await page.wait_for_selector('.video-img-box, a[href*="/videos/"], div.col-6', timeout=15000)
+            except Exception:
+                pass
+                
+        await page.wait_for_timeout(2500)
         return True
     except Exception as e:
         print(f"    ⚠️ 導航失敗 ({url}): {e}")
         return False
 
 def extract_field_after_label(soup, label):
-    """
-    精確抓取頁面中指定標籤（如 "女優" 或 "類型"）後面的字串內容
-    """
+    """精確抓取頁面中指定標籤（如 "女優" 或 "類型"）後面的字串內容"""
     pattern = re.compile(rf'{label}\s*[:：]')
     for node in soup.find_all(string=pattern):
-        # 尋找包覆該標籤文字的最合適行容器
         container = node.find_parent(['div', 'p', 'li', 'tr', 'section'])
         if not container:
             container = node.parent
@@ -391,7 +401,6 @@ def extract_field_after_label(soup, label):
             container = container.parent
 
         if container:
-            # 優先提取容器內除了標籤名稱本身以外的所有 <a> 連結文字（MissAv 標準欄位）
             a_texts = [
                 a.get_text(strip=True) for a in container.find_all('a') 
                 if a.get_text(strip=True) and not re.search(pattern, a.get_text(strip=True))
@@ -399,12 +408,10 @@ def extract_field_after_label(soup, label):
             if a_texts:
                 return ", ".join(list(dict.fromkeys(a_texts)))
             
-            # 若無 <a> 標籤，則直接抓取 label: 後方的純文字
             text = container.get_text(" ", strip=True)
             m = re.search(rf'{label}\s*[:：]\s*(.+)', text)
             if m:
                 val = m.group(1).strip()
-                # 避免切到後方可能緊鄰的其他標籤
                 val = re.split(r'\s+(?:類型|女優|番號|標籤|發行日期|導演|片商)[:：]', val)[0]
                 return val.strip()
     return ""
@@ -413,7 +420,7 @@ async def run_scraper():
     init_db()
     jable_target_paths = ["/tags/pantyhose/", "/tags/black-pantyhose/", "/tags/footjob/"]
     
-    # 🎯 篩選關鍵字：只要包含其中任一個即符合
+    # MissAv 篩選關鍵字：只要包含其中任一個即符合
     target_genre_keywords = ["ol", "絲襪", "丝袜", "腳交", "脚交", "足交", "戀足", "恋足", "pantyhose", "footjob"]
 
     seen_urls = set()
@@ -440,14 +447,22 @@ async def run_scraper():
                 target_url = "https://jable.tv/categories/chinese-subtitle/" if page_num == 1 else f"https://jable.tv/categories/chinese-subtitle/{page_num}/"
                 print(f"正在掃描 Jable 第 {page_num}/2 頁: {target_url}")
 
-                await safe_navigate(page, target_url, is_category=True)
+                nav_ok = await safe_navigate(page, target_url, is_category=True)
+                if not nav_ok:
+                    print(f"  ❌ 無法進入 Jable 第 {page_num} 頁，跳過該頁")
+                    continue
 
                 for _ in range(4):
                     await page.evaluate("window.scrollTo(0, document.body.scrollHeight);")
                     await page.wait_for_timeout(1500)
 
                 soup = BeautifulSoup(await page.content(), 'html.parser')
+                
+                # 雙重選擇器：優先抓 .video-img-box，若為 0 則抓取卡片容器
                 video_boxes = soup.select('.video-img-box')
+                if not video_boxes:
+                    video_boxes = soup.select('div.col-6.col-sm-4.col-lg-3, div[class*="video-img-box"]')
+
                 print(f"  -> Jable 第 {page_num} 頁抓到 {len(video_boxes)} 個影片方塊")
 
                 for box in video_boxes:
@@ -500,7 +515,10 @@ async def run_scraper():
                 missav_url = "https://missav.ws/dm278/chinese-subtitle" if page_num == 1 else f"https://missav.ws/dm278/chinese-subtitle?page={page_num}"
                 print(f"正在掃描 MissAv 第 {page_num}/2 頁: {missav_url}")
 
-                await safe_navigate(page, missav_url, is_category=True)
+                nav_ok = await safe_navigate(page, missav_url, is_category=True)
+                if not nav_ok:
+                    print(f"  ❌ 無法進入 MissAv 第 {page_num} 頁，跳過該頁")
+                    continue
 
                 for _ in range(4):
                     await page.evaluate("window.scrollTo(0, document.body.scrollHeight);")
@@ -508,7 +526,7 @@ async def run_scraper():
 
                 soup = BeautifulSoup(await page.content(), 'html.parser')
                 
-                # 收集包含標準番號格式的影片連結
+                # 收集包含標準番號特徵的影片連結
                 candidate_urls = []
                 for a in soup.find_all('a', href=True):
                     href = a.get('href', '').strip()
@@ -530,7 +548,7 @@ async def run_scraper():
                         await safe_navigate(page, video_url, is_category=False)
                         detail_soup = BeautifulSoup(await page.content(), 'html.parser')
                         
-                        # 排除全站頂部與底部選單標籤
+                        # 排除頁首與頁尾的全站選單干擾
                         if detail_soup.find('header'):
                             detail_soup.find('header').decompose()
                         if detail_soup.find('footer'):
@@ -548,25 +566,25 @@ async def run_scraper():
                             if v_tag and v_tag.get('poster'):
                                 cover_image_url = v_tag['poster']
 
-                        # 3. 🎯 抓取「女優: 」後面的字串
+                        # 3. 抓取「女優: 」後面的字串
                         actress_name = extract_field_after_label(detail_soup, "女優")
                         if not actress_name:
                             actress_elems = detail_soup.select('a[href*="/actresses/"], a[href*="/actress/"]')
                             actresses = [a.text.strip() for a in actress_elems if a.text.strip()]
                             actress_name = ", ".join(list(dict.fromkeys(actresses))) if actresses else "未知"
 
-                        # 4. 🎯 抓取「類型: 」後面的字串
+                        # 4. 抓取「類型: 」後面的字串
                         tags_str = extract_field_after_label(detail_soup, "類型")
                         if not tags_str:
                             genre_elems = detail_soup.select('a[href*="/genres/"]')
                             genres_list = [g.text.strip() for g in genre_elems if g.text.strip()]
                             tags_str = ", ".join(list(dict.fromkeys(genres_list))) if genres_list else "一般"
 
-                        # 判定「類型: 」後方的字串是否包含目標關鍵字 (OL, 絲襪, 腳交, 戀足 等)
+                        # 檢查「類型: 」後方的字串是否包含目標關鍵字
                         tags_lower = tags_str.lower()
                         has_genre_match = any(kw in tags_lower for kw in target_genre_keywords)
 
-                        # 輔助判定：檢查 genres 超連結 slug（防止無頭環境下語言切換為英文 slug）
+                        # 輔助判定：比對 genres 標籤 slug
                         if not has_genre_match:
                             for g in detail_soup.select('a[href*="/genres/"]'):
                                 g_href = g.get('href', '').lower()
