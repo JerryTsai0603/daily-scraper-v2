@@ -255,7 +255,7 @@ def generate_index_html():
             let visibleCount = 0;
             cards.forEach(card => {
                 const actress = card.getAttribute('data-actress') || '';
-                const tags = card.getAttribute('data-tags') || '';
+                const tags = card.getAttribute('data-tags'] || '';
                 
                 const matchKeyword = selectedKeywords.length === 0 || selectedKeywords.some(kw => tags.includes(kw));
                 const matchActress = !actressVal || actress.includes(actressVal);
@@ -275,7 +275,7 @@ def generate_index_html():
             const isOldest = dateSort.value === 'oldest';
             const sortedCards = cards.slice().sort((a, b) => {
                 const dateA = a.getAttribute('data-date') || '';
-                const dateB = b.getAttribute('data-date') || '';
+                const dateB = b.getAttribute('data-date'] || '';
                 return isOldest ? dateA.localeCompare(dateB) : dateB.localeCompare(dateA);
             });
             sortedCards.forEach(card => grid.appendChild(card));
@@ -455,10 +455,10 @@ async def run_scraper():
                 soup = BeautifulSoup(await page.content(), 'html.parser')
                 missav_links = []
                 
-                # 🎯 使用精準正規表達式過濾 MissAv 影片連結，排除導覽與分頁
+                # 🎯 MissAv 影片網址通常包含英文代碼與連字號（例如 /cn/abp-123 或 /dm278/abp-123）
                 for a in soup.find_all('a', href=True):
                     href = a['href']
-                    if re.search(r'/cn/[a-zA-Z0-9]+-[a-zA-Z0-9-]+', href):
+                    if re.search(r'/[a-zA-Z0-9]+-[a-zA-Z0-9-]+', href) and 'chinese-subtitle' not in href and 'page=' not in href:
                         full_url = href if href.startswith('http') else f"https://missav.ws{href}"
                         if full_url not in seen_urls:
                             seen_urls.add(full_url)
