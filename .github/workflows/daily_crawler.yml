@@ -2,14 +2,20 @@ name: Daily Video Scraper
 
 on:
   schedule:
-    # 每天定時執行兩次：
     # UTC 22:00 對應台灣時間 早上 06:00
     # UTC 14:00 對應台灣時間 晚上 22:00
     - cron: '0 14,22 * * *'
-  workflow_dispatch: # 支援在 GitHub 介面上手動點擊觸發
+  workflow_dispatch: # 支援手動按鈕執行
 
 permissions:
-  contents: write # 允許 GitHub Actions 將更新後的資料庫與網頁推回儲存庫
+  contents: write    # 允許提交資料庫與 index.html 回儲存庫
+  pages: write       # 允許直接發布至 GitHub Pages
+  id-token: write    # 部署 GitHub Pages 所需的身份權限
+
+# 確保同一時間只有一個 Pages 部署任務在執行
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   run-crawler:
@@ -58,3 +64,15 @@ jobs:
           git add index.html || true
           if [ -f "videos.db" ]; then git add videos.db; fi
           git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update database and index.html" && git push)
+
+      - name: 設定 GitHub Pages 資源環境
+        uses: actions/configure-pages@v5
+
+      - name: 打包網頁檔案 (Artifact)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.' # 將包含 index.html 的根目錄進行封裝上傳
+
+      - name: 直接發布至 GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
