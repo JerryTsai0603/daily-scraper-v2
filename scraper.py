@@ -3,6 +3,7 @@ import json
 import asyncio
 import sqlite3
 import smtplib
+import re
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -36,12 +37,15 @@ def init_db():
     if "actress" not in columns:
         cursor.execute("ALTER TABLE videos ADD COLUMN actress TEXT")
     
-    # 🧹 自動清理先前誤收錄的分類頁或無效紀錄
+    # 🧹 只精準清理非影片的分類或錯誤網址，絕不誤刪帶有 -chinese-subtitle 的影片
     cursor.execute("""
         DELETE FROM videos 
-        WHERE video_url LIKE '%/dm%' 
+        WHERE video_url LIKE '%/dm278%' 
            OR video_url LIKE '%/genres/%'
-           OR video_url LIKE '%chinese-subtitle%'
+           OR video_url LIKE '%/tags/%'
+           OR video_url LIKE '%/actresses/%'
+           OR video_url = 'https://missav.ws/chinese-subtitle'
+           OR video_url = 'https://missav.ws/dm278/chinese-subtitle'
            OR title = '未知標題'
            OR title = ''
     """)
@@ -70,7 +74,6 @@ def get_all_videos():
     return rows
 
 def sync_to_google_sheet(new_videos):
-    """智慧同步：自動比對 Google 試算表與資料庫，補齊遺漏影片，並自動將該列列高設定為 120px 放大圖片"""
     creds_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
     sheet_id = os.getenv("GOOGLE_SHEET_ID")
 
@@ -116,7 +119,7 @@ def sync_to_google_sheet(new_videos):
                 added_count += 1
 
         if added_count > 0:
-            print(f"✅ 成功同步 {added_count} 筆影片至 Google 試算表，並已自動放大圖片儲存格！")
+            print(f"✅ 成功同步 {added_count} 筆影片至 Google 試算表！")
         else:
             print("✅ Google 試算表已包含所有資料庫影片，無需同步。")
     except Exception as e:
@@ -372,8 +375,9 @@ async def run_scraper():
     init_db()
     jable_target_paths = ["/tags/pantyhose/", "/tags/black-pantyhose/", "/tags/footjob/"]
     
-    # 🎯 MissAv 目標類型關鍵字（支援繁簡體與常見英文）
-    missav_target_genres = ["ol", "絲襪", "丝袜", "腳交", "脚交", "足交", "戀足", "恋足", "pantyhose", "footjob"]
+    # 🎯 MissAv 內頁類型名稱與 slug 雙向關鍵字
+    target_genre_texts = ["ol", "絲襪", "丝袜", "腳交", "脚交", "足交", "戀足", "恋足", "美腿"]
+    target_genre_slugs = ["/ol", "/pantyhose", "/black-pantyhose", "/footjob", "/feet", "/fetish"]
 
     seen_urls = set()
     newly_added_videos = []
@@ -467,94 +471,72 @@ async def run_scraper():
 
                 soup = BeautifulSoup(await page.content(), 'html.parser')
                 
-                # 🎯 精準辨識列表中的影片卡片（同時儲存封面的備用 URL 與標題）
-                candidate_items = []
+                # 🎯 只要包含標準番號格式（例如 ipzz-963 或 ssis-123）就視為影片網址
+                candidate_urls = []
                 for a in soup.find_all('a', href=True):
                     href = a.get('href', '').strip()
-                    img = a.find('img')
-                    if not img:
+                    
+                    # 排除選單、女優庫、類型庫與分類頁
+                    if any(p in href for p in ['/genres/', '/tags/', '/actresses/', '/actress/', '/makers/', '/series/', '/dm', 'login', 'search', 'page=']):
                         continue
+                    
+                    # 辨識番號特徵（英文代碼 + 連字號 + 數字）
+                    if re.search(r'[a-zA-Z0-9]+-\d+', href):
+                        full_url = href if href.startswith('http') else f"https://missav.ws{href}"
+                        full_url = full_url.split('?')[0].rstrip('/')
+                        if full_url not in seen_urls:
+                            seen_urls.add(full_url)
+                            candidate_urls.append(full_url)
 
-                    full_url = href if href.startswith('http') else f"https://missav.ws{href}"
-                    parsed_path = full_url.replace("https://missav.ws", "").split('?')[0].strip('/')
-                    parts = parsed_path.split('/')
+                print(f"  -> MissAv 第 {page_num} 頁精準辨識出 {len(candidate_urls)} 部待檢查影片")
 
-                    # 純影片網址路徑格式通常為 /cn/{code} 或 /{code}，排除分類與導覽
-                    if len(parts) == 1 and len(parts[0]) > 3:
-                        slug = parts[0]
-                    elif len(parts) == 2 and parts[0] in ['cn', 'en', 'ja', 'zh'] and len(parts[1]) > 3:
-                        slug = parts[1]
-                    else:
-                        continue
-
-                    excluded = ['genres', 'tags', 'actresses', 'makers', 'series', 'dm', 'chinese-subtitle', 'login', 'search', 'vip']
-                    if any(ex in slug.lower() for ex in excluded):
-                        continue
-
-                    card_title = img.get('alt', '').strip()
-                    card_cover = img.get('data-src') or img.get('src') or ''
-                    if card_cover.startswith('//'):
-                        card_cover = 'https:' + card_cover
-
-                    if full_url not in seen_urls:
-                        seen_urls.add(full_url)
-                        candidate_items.append({
-                            'url': full_url,
-                            'card_title': card_title,
-                            'card_cover': card_cover
-                        })
-
-                print(f"  -> MissAv 第 {page_num} 頁精準辨識出 {len(candidate_items)} 部影片連結")
-
-                for item in candidate_items:
-                    video_url = item['url']
+                for video_url in candidate_urls:
                     try:
                         await safe_navigate(page, video_url, is_category=False)
                         detail_soup = BeautifulSoup(await page.content(), 'html.parser')
                         
-                        # 🚫 關鍵防護：先剔除導覽選單與頁尾，避免全站選單標籤干擾
-                        for nav_tag in detail_soup(['header', 'nav', 'footer']):
-                            nav_tag.decompose()
+                        # 剔除頁首與頁尾的全站選單
+                        if detail_soup.find('header'):
+                            detail_soup.find('header').decompose()
+                        if detail_soup.find('footer'):
+                            detail_soup.find('footer').decompose()
 
                         # 1. 抓取標題
                         title_elem = detail_soup.select_one('h1') or detail_soup.find('title')
-                        video_title = title_elem.text.strip().replace(" - MissAV", "").strip() if title_elem else ""
-                        if not video_title or len(video_title) < 2:
-                            video_title = item['card_title'] if item['card_title'] else "未知標題"
+                        video_title = title_elem.text.strip().replace(" - MissAV", "").replace(" - MissAV.com", "").strip() if title_elem else "未知標題"
 
-                        # 2. 抓取封面圖片（多重回退機制）
-                        cover_image_url = ""
-                        og_img = detail_soup.select_one('meta[property="og:image"]') or detail_soup.select_one('meta[name="twitter:image"]')
-                        if og_img and og_img.get('content') and og_img.get('content').startswith('http'):
-                            cover_image_url = og_img['content']
-                        
+                        # 2. 抓取封面圖片
+                        img_meta = detail_soup.select_one('meta[property="og:image"]') or detail_soup.select_one('meta[name="twitter:image"]')
+                        cover_image_url = img_meta.get('content') if img_meta else ""
                         if not cover_image_url:
-                            video_elem = detail_soup.find('video')
-                            if video_elem and video_elem.get('poster'):
-                                cover_image_url = video_elem['poster']
-                        
-                        if not cover_image_url:
-                            cover_image_url = item['card_cover']
-
-                        if cover_image_url.startswith('//'):
-                            cover_image_url = 'https:' + cover_image_url
+                            v_tag = detail_soup.find('video')
+                            if v_tag and v_tag.get('poster'):
+                                cover_image_url = v_tag['poster']
 
                         # 3. 抓取女優名稱
                         actress_elems = detail_soup.select('a[href*="/actresses/"], a[href*="/actress/"]')
                         actresses = [a.text.strip() for a in actress_elems if a.text.strip()]
-                        unique_actresses = list(dict.fromkeys(actresses))
-                        actress_name = ", ".join(unique_actresses) if unique_actresses else "未知"
+                        actress_name = ", ".join(list(dict.fromkeys(actresses))) if actresses else "未知"
 
-                        # 4. 抓取「類型 (Genres)」並進行嚴格比對
+                        # 4. 抓取「類型 (Genres)」並雙向比對文字與網址 slug
                         genre_elems = detail_soup.select('a[href*="/genres/"]')
                         genres_list = [g.text.strip() for g in genre_elems if g.text.strip()]
-                        unique_genres = list(dict.fromkeys(genres_list))
-                        tags_str = ", ".join(unique_genres) if unique_genres else "一般"
+                        tags_str = ", ".join(list(dict.fromkeys(genres_list))) if genres_list else "一般"
 
-                        has_genre_match = any(
-                            any(kw in g.lower() for kw in missav_target_genres)
-                            for g in unique_genres
-                        )
+                        has_genre_match = False
+                        for g in genre_elems:
+                            g_text = g.text.strip().lower()
+                            g_href = g.get('href', '').lower()
+
+                            # 比對標籤文字
+                            if any(kw in g_text for kw in target_genre_texts):
+                                has_genre_match = True
+                                break
+                            
+                            # 比對標籤 slug
+                            if any(slug in g_href for slug in target_genre_slugs):
+                                has_genre_match = True
+                                break
 
                         if has_genre_match:
                             if save_video(video_title, cover_image_url, tags_str, actress_name, video_url):
@@ -562,8 +544,12 @@ async def run_scraper():
                                     "title": video_title, "cover_url": cover_image_url,
                                     "tags": tags_str, "actress": actress_name, "video_url": video_url
                                 })
-                                print(f"  🎯 [MissAv 收錄] {video_title} (女優: {actress_name}) (類型: {tags_str})")
-                    except Exception:
+                                print(f"  🎯 [MissAv 成功收錄] {video_title} (女優: {actress_name}) (類型: {tags_str})")
+                        else:
+                            print(f"  ⚪ [MissAv 未符合類型] {video_title} (類型: {tags_str})")
+
+                    except Exception as e:
+                        print(f"    ⚠️ 解析 MissAv 內頁失敗 ({video_url}): {e}")
                         continue
 
             print(f"✅ 雙平台爬取結束！總共新收錄 {len(newly_added_videos)} 部影片")
