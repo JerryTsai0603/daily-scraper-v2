@@ -116,7 +116,8 @@ def generate_index_html():
     videos = get_all_videos()
     all_actresses = set()
     all_tags_set = set()
-    cards_html = ""
+    cards_list = []
+
     for v in reversed(videos):
         vid_id, title, cover_url, tags, actress, video_url, created_at = v
         actress_display = actress.strip() if actress and actress.strip() else "未知/多人"
@@ -133,13 +134,14 @@ def generate_index_html():
         date_str = created_at[:10] if created_at else ""
         cover_img = cover_url if cover_url else "https://via.placeholder.com/300x180?text=No+Cover"
 
-        cards_html += f"""
-        <div class="card" data-title="{title.lower()}" data-actress="{actress_display.lower()}" data-tags="{(tags or '').lower()}" data-date="{date_str}">
-            <img src="{cover_img}" alt="封面" loading="lazy" referrerpolicy="no-referrer">
-            <div class="card-body">
-                <div class="title" title="{title}">{title}</div>
-                <div class="meta-row">
-                    <span class="badge actress-badge">👩 {actress_display}</span>
-                    <span class="date">📅 {date_str}</span>
-                </div>
-                <div class="tags" title="{tags or ''
+        card_html = (
+            f'<div class="card" data-title="{title.lower()}" data-actress="{actress_display.lower()}" data-tags="{(tags or "").lower()}" data-date="{date_str}">'
+            f'<img src="{cover_img}" alt="封面" loading="lazy" referrerpolicy="no-referrer">'
+            f'<div class="card-body">'
+            f'<div class="title" title="{title}">{title}</div>'
+            f'<div class="meta-row">'
+            f'<span class="badge actress-badge">👩 {actress_display}</span>'
+            f'<span class="date">📅 {date_str}</span>'
+            f'</div>'
+            f'<div class="tags" title="{tags or ""}">🏷️ {tags or "無標籤"}</div>'
+            f'<div class="footer">'
