@@ -37,7 +37,7 @@ def init_db():
     if "actress" not in columns:
         cursor.execute("ALTER TABLE videos ADD COLUMN actress TEXT")
     
-    # 🧹 只精準清理非影片的分類或錯誤網址，絕不誤刪帶有 -chinese-subtitle 的影片
+    # 🧹 清理先前非影片的分類或無效紀錄
     cursor.execute("""
         DELETE FROM videos 
         WHERE video_url LIKE '%/dm278%' 
@@ -56,9 +56,15 @@ def save_video(title, cover_url, tags, actress, video_url):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     try:
+        # 使用 ON CONFLICT DO UPDATE，若已有紀錄且先前資料為「未知」或「一般」，自動更新為最新精準抓取的內容
         cursor.execute("""
-            INSERT OR IGNORE INTO videos (title, cover_url, tags, actress, video_url)
+            INSERT INTO videos (title, cover_url, tags, actress, video_url)
             VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(video_url) DO UPDATE SET
+                title = excluded.title,
+                cover_url = CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE videos.cover_url END,
+                tags = CASE WHEN excluded.tags != '' AND excluded.tags != '一般' THEN excluded.tags ELSE videos.tags END,
+                actress = CASE WHEN excluded.actress != '' AND excluded.actress != '未知' THEN excluded.actress ELSE videos.actress END
         """, (title, cover_url, tags, actress, video_url))
         conn.commit()
         return cursor.rowcount > 0
@@ -371,13 +377,44 @@ async def safe_navigate(page, url, is_category=True):
         print(f"    ⚠️ 導航失敗 ({url}): {e}")
         return False
 
+def extract_field_after_label(soup, label):
+    """
+    精確抓取頁面中指定標籤（如 "女優" 或 "類型"）後面的字串內容
+    """
+    pattern = re.compile(rf'{label}\s*[:：]')
+    for node in soup.find_all(string=pattern):
+        # 尋找包覆該標籤文字的最合適行容器
+        container = node.find_parent(['div', 'p', 'li', 'tr', 'section'])
+        if not container:
+            container = node.parent
+        if container and container.name in ['span', 'b', 'strong', 'label', 'a']:
+            container = container.parent
+
+        if container:
+            # 優先提取容器內除了標籤名稱本身以外的所有 <a> 連結文字（MissAv 標準欄位）
+            a_texts = [
+                a.get_text(strip=True) for a in container.find_all('a') 
+                if a.get_text(strip=True) and not re.search(pattern, a.get_text(strip=True))
+            ]
+            if a_texts:
+                return ", ".join(list(dict.fromkeys(a_texts)))
+            
+            # 若無 <a> 標籤，則直接抓取 label: 後方的純文字
+            text = container.get_text(" ", strip=True)
+            m = re.search(rf'{label}\s*[:：]\s*(.+)', text)
+            if m:
+                val = m.group(1).strip()
+                # 避免切到後方可能緊鄰的其他標籤
+                val = re.split(r'\s+(?:類型|女優|番號|標籤|發行日期|導演|片商)[:：]', val)[0]
+                return val.strip()
+    return ""
+
 async def run_scraper():
     init_db()
     jable_target_paths = ["/tags/pantyhose/", "/tags/black-pantyhose/", "/tags/footjob/"]
     
-    # 🎯 MissAv 內頁類型名稱與 slug 雙向關鍵字
-    target_genre_texts = ["ol", "絲襪", "丝袜", "腳交", "脚交", "足交", "戀足", "恋足", "美腿"]
-    target_genre_slugs = ["/ol", "/pantyhose", "/black-pantyhose", "/footjob", "/feet", "/fetish"]
+    # 🎯 篩選關鍵字：只要包含其中任一個即符合
+    target_genre_keywords = ["ol", "絲襪", "丝袜", "腳交", "脚交", "足交", "戀足", "恋足", "pantyhose", "footjob"]
 
     seen_urls = set()
     newly_added_videos = []
@@ -471,18 +508,16 @@ async def run_scraper():
 
                 soup = BeautifulSoup(await page.content(), 'html.parser')
                 
-                # 🎯 只要包含標準番號格式（例如 ipzz-963 或 ssis-123）就視為影片網址
+                # 收集包含標準番號格式的影片連結
                 candidate_urls = []
                 for a in soup.find_all('a', href=True):
                     href = a.get('href', '').strip()
                     
-                    # 排除選單、女優庫、類型庫與分類頁
                     if any(p in href for p in ['/genres/', '/tags/', '/actresses/', '/actress/', '/makers/', '/series/', '/dm', 'login', 'search', 'page=']):
                         continue
                     
-                    # 辨識番號特徵（英文代碼 + 連字號 + 數字）
                     if re.search(r'[a-zA-Z0-9]+-\d+', href):
-                        full_url = href if href.startswith('http') else f"https://missav.ws{href}"
+                        full_url = href if href.startswith('http') else f"https://missav.ws{href if href.startswith('/') else '/' + href}"
                         full_url = full_url.split('?')[0].rstrip('/')
                         if full_url not in seen_urls:
                             seen_urls.add(full_url)
@@ -495,7 +530,7 @@ async def run_scraper():
                         await safe_navigate(page, video_url, is_category=False)
                         detail_soup = BeautifulSoup(await page.content(), 'html.parser')
                         
-                        # 剔除頁首與頁尾的全站選單
+                        # 排除全站頂部與底部選單標籤
                         if detail_soup.find('header'):
                             detail_soup.find('header').decompose()
                         if detail_soup.find('footer'):
@@ -513,30 +548,31 @@ async def run_scraper():
                             if v_tag and v_tag.get('poster'):
                                 cover_image_url = v_tag['poster']
 
-                        # 3. 抓取女優名稱
-                        actress_elems = detail_soup.select('a[href*="/actresses/"], a[href*="/actress/"]')
-                        actresses = [a.text.strip() for a in actress_elems if a.text.strip()]
-                        actress_name = ", ".join(list(dict.fromkeys(actresses))) if actresses else "未知"
+                        # 3. 🎯 抓取「女優: 」後面的字串
+                        actress_name = extract_field_after_label(detail_soup, "女優")
+                        if not actress_name:
+                            actress_elems = detail_soup.select('a[href*="/actresses/"], a[href*="/actress/"]')
+                            actresses = [a.text.strip() for a in actress_elems if a.text.strip()]
+                            actress_name = ", ".join(list(dict.fromkeys(actresses))) if actresses else "未知"
 
-                        # 4. 抓取「類型 (Genres)」並雙向比對文字與網址 slug
-                        genre_elems = detail_soup.select('a[href*="/genres/"]')
-                        genres_list = [g.text.strip() for g in genre_elems if g.text.strip()]
-                        tags_str = ", ".join(list(dict.fromkeys(genres_list))) if genres_list else "一般"
+                        # 4. 🎯 抓取「類型: 」後面的字串
+                        tags_str = extract_field_after_label(detail_soup, "類型")
+                        if not tags_str:
+                            genre_elems = detail_soup.select('a[href*="/genres/"]')
+                            genres_list = [g.text.strip() for g in genre_elems if g.text.strip()]
+                            tags_str = ", ".join(list(dict.fromkeys(genres_list))) if genres_list else "一般"
 
-                        has_genre_match = False
-                        for g in genre_elems:
-                            g_text = g.text.strip().lower()
-                            g_href = g.get('href', '').lower()
+                        # 判定「類型: 」後方的字串是否包含目標關鍵字 (OL, 絲襪, 腳交, 戀足 等)
+                        tags_lower = tags_str.lower()
+                        has_genre_match = any(kw in tags_lower for kw in target_genre_keywords)
 
-                            # 比對標籤文字
-                            if any(kw in g_text for kw in target_genre_texts):
-                                has_genre_match = True
-                                break
-                            
-                            # 比對標籤 slug
-                            if any(slug in g_href for slug in target_genre_slugs):
-                                has_genre_match = True
-                                break
+                        # 輔助判定：檢查 genres 超連結 slug（防止無頭環境下語言切換為英文 slug）
+                        if not has_genre_match:
+                            for g in detail_soup.select('a[href*="/genres/"]'):
+                                g_href = g.get('href', '').lower()
+                                if any(slug in g_href for slug in ["/ol", "/pantyhose", "/black-pantyhose", "/footjob", "/feet"]):
+                                    has_genre_match = True
+                                    break
 
                         if has_genre_match:
                             if save_video(video_title, cover_image_url, tags_str, actress_name, video_url):
@@ -546,7 +582,7 @@ async def run_scraper():
                                 })
                                 print(f"  🎯 [MissAv 成功收錄] {video_title} (女優: {actress_name}) (類型: {tags_str})")
                         else:
-                            print(f"  ⚪ [MissAv 未符合類型] {video_title} (類型: {tags_str})")
+                            print(f"  ⚪ [MissAv 未符合] {video_title} (類型: {tags_str})")
 
                     except Exception as e:
                         print(f"    ⚠️ 解析 MissAv 內頁失敗 ({video_url}): {e}")
