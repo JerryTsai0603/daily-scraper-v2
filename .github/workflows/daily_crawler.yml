@@ -65,8 +65,6 @@ jobs:
           if [ -f "videos.db" ]; then git add videos.db; fi
           git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update database, index.html and sync gsheet [skip ci]" && git push)
 
-```
-
 ---
 
 ### 第二步：更新 `scraper.py`（同時支援 Jable 與 MissAv 雙平台爬蟲、指定標籤過濾與表格 120px 放大）
