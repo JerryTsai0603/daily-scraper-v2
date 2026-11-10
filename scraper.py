@@ -6,6 +6,7 @@ import smtplib
 import re
 import random
 import functools
+import html
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -48,8 +49,7 @@ def init_db():
     # 清理非影片的分類或無效路徑
     cursor.execute("""
         DELETE FROM videos 
-        WHERE video_url LIKE '%/dm278%' 
-           OR video_url LIKE '%/genres/%'
+        WHERE video_url LIKE '%/genres/%'
            OR video_url LIKE '%/tags/%'
            OR video_url LIKE '%/actresses/%'
            OR video_url = 'https://missav.ws/chinese-subtitle'
@@ -63,19 +63,20 @@ def init_db():
 def save_video(title, cover_url, tags, actress, video_url, release_date=""):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+    # 清理標題中的換行與異常空格
+    clean_title = re.sub(r'\s+', ' ', title).strip()
     try:
-        # 新增或更新資料，更新時同步更新欄位並刷新 created_at
         cursor.execute("""
             INSERT INTO videos (title, cover_url, tags, actress, video_url, release_date, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
             ON CONFLICT(video_url) DO UPDATE SET
                 title = excluded.title,
                 cover_url = CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE videos.cover_url END,
                 tags = CASE WHEN excluded.tags != '' AND excluded.tags != '一般' THEN excluded.tags ELSE videos.tags END,
                 actress = CASE WHEN excluded.actress != '' AND excluded.actress != '未知' THEN excluded.actress ELSE videos.actress END,
                 release_date = CASE WHEN excluded.release_date != '' THEN excluded.release_date ELSE videos.release_date END,
-                created_at = CURRENT_TIMESTAMP
-        """, (title, cover_url, tags, actress, video_url, release_date))
+                created_at = datetime('now', 'localtime')
+        """, (clean_title, cover_url, tags, actress, video_url, release_date))
         conn.commit()
         return cursor.rowcount > 0
     finally:
@@ -84,7 +85,6 @@ def save_video(title, cover_url, tags, actress, video_url, release_date=""):
 def get_all_videos():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    # 預設依爬取時間由新到舊排序
     cursor.execute("""
         SELECT id, title, cover_url, tags, actress, video_url, COALESCE(release_date, ''), created_at 
         FROM videos 
@@ -95,7 +95,6 @@ def get_all_videos():
     return rows
 
 def sync_to_google_sheet(new_videos):
-    """同步資料至 Google 試算表並設定圖片欄高 120px"""
     creds_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
     sheet_id = os.getenv("GOOGLE_SHEET_ID")
 
@@ -117,7 +116,6 @@ def sync_to_google_sheet(new_videos):
             existing_urls = set()
             current_row_index = 2
         else:
-            # 兼容不同列位置，抓出所有已存在的影片 URL
             existing_urls = {col for row in existing_rows[1:] for col in row if str(col).startswith('http')}
             current_row_index = len(existing_rows) + 1
 
@@ -156,6 +154,7 @@ def generate_index_html():
     
     for v in videos:
         vid_id, title, cover_url, tags, actress, video_url, release_date, created_at = v
+        
         actress_display = actress.strip() if actress and actress.strip() else "未知/多人"
         if actress:
             for act in actress.split(','):
@@ -174,17 +173,25 @@ def generate_index_html():
         release_date_str = release_date.strip() if release_date and release_date.strip() else crawled_date_str
         cover_img = cover_url if cover_url else "https://via.placeholder.com/300x180?text=No+Cover"
 
+        # 關鍵安全跳脫：防止標題引號破壞 HTML 屬性
+        safe_title_attr = html.escape(title.lower(), quote=True)
+        safe_title_text = html.escape(title)
+        safe_actress_attr = html.escape(actress_display.lower(), quote=True)
+        safe_actress_text = html.escape(actress_display)
+        safe_tags_attr = html.escape((tags or '').lower(), quote=True)
+        safe_tags_text = html.escape(tags or '無標籤')
+
         cards_html += f"""
-        <div class="card" data-title="{title.lower()}" data-actress="{actress_display.lower()}" data-tags="{(tags or '').lower()}" data-release="{release_date_str}" data-crawled="{crawled_full}">
+        <div class="card" data-title="{safe_title_attr}" data-actress="{safe_actress_attr}" data-tags="{safe_tags_attr}" data-release="{release_date_str}" data-crawled="{crawled_full}">
             <img src="{cover_img}" alt="封面" loading="lazy" referrerpolicy="no-referrer">
             <div class="card-body">
-                <div class="title" title="{title}">{title}</div>
+                <div class="title" title="{safe_title_attr}">{safe_title_text}</div>
                 <div class="meta-row">
-                    <span class="badge actress-badge">👩 {actress_display}</span>
+                    <span class="badge actress-badge">👩 {safe_actress_text}</span>
                     <span class="date" title="影片發布日期">📅 {release_date_str}</span>
                 </div>
                 <div class="crawled-time">🕒 爬取時間: {crawled_date_str}</div>
-                <div class="tags" title="{tags or ''}">🏷️ {tags or '無標籤'}</div>
+                <div class="tags" title="{safe_tags_attr}">🏷️ {safe_tags_text}</div>
                 <div class="footer">
                     <a href="{video_url}" target="_blank" class="btn">前往觀看</a>
                 </div>
@@ -192,10 +199,10 @@ def generate_index_html():
         </div>
         """
 
-    actress_options = "".join([f'<option value="{act.lower()}">{act}</option>' for act in sorted(all_actresses)])
+    actress_options = "".join([f'<option value="{html.escape(act.lower(), quote=True)}">{html.escape(act)}</option>' for act in sorted(all_actresses)])
     
     checkboxes_html = "".join([
-        f'<label class="checkbox-label"><input type="checkbox" name="keyword" value="{tag}"> {tag}</label>' 
+        f'<label class="checkbox-label"><input type="checkbox" name="keyword" value="{html.escape(tag, quote=True)}"> {html.escape(tag)}</label>' 
         for tag in sorted(all_tags_set)
     ]) if all_tags_set else '<span style="color: #94a3b8; font-size: 0.85rem;">尚無標籤資料</span>'
 
@@ -349,7 +356,6 @@ def generate_index_html():
         actressSelect.addEventListener('change', applyFilter);
         sortSelect.addEventListener('change', () => { applySort(); applyFilter(); });
 
-        // 預設載入套用排序
         applySort();
         applyFilter();
     </script>
@@ -394,7 +400,6 @@ def send_email_report(new_videos):
         print(f"❌ 郵件寄送失敗: {e}")
 
 async def is_cf_challenge(page):
-    """精準檢測頁面是否正處於 Cloudflare 驗證狀態"""
     try:
         title = (await page.title()).lower()
         if any(k in title for k in [
@@ -418,7 +423,6 @@ async def is_cf_challenge(page):
         return False
 
 async def wait_until_cf_cleared(page, max_wait_sec=45):
-    """主動等待 Cloudflare 盾通過，並自動點擊 Turnstile 驗證框"""
     for _ in range(max_wait_sec):
         cf_active = await is_cf_challenge(page)
         if not cf_active:
@@ -428,7 +432,6 @@ async def wait_until_cf_cleared(page, max_wait_sec=45):
             if title.strip() and title.strip().lower() != "jable.tv":
                 return True
 
-        # 自動偵測並點擊 Turnstile 勾選框
         try:
             for frame in page.frames:
                 if "challenges.cloudflare.com" in frame.url:
@@ -445,7 +448,6 @@ async def wait_until_cf_cleared(page, max_wait_sec=45):
     return not await is_cf_challenge(page)
 
 async def safe_navigate(page, url, is_category=True, max_retries=2):
-    """具備重試、Cloudflare 穿透與 DOM 載入確認的導航函式"""
     for attempt in range(1, max_retries + 1):
         try:
             await page.goto(url, timeout=60000, wait_until="domcontentloaded")
@@ -484,7 +486,6 @@ async def safe_navigate(page, url, is_category=True, max_retries=2):
     return False
 
 def extract_field_after_label(soup, label):
-    """精準抓取指定標籤（如 '女優'、'類型' 或 '發行日期'）後方的字串內容"""
     pattern = re.compile(rf'{label}\s*[:：]')
     for node in soup.find_all(string=pattern):
         container = node.find_parent(['div', 'p', 'li', 'tr', 'section'])
@@ -510,7 +511,6 @@ def extract_field_after_label(soup, label):
     return ""
 
 def extract_release_date(soup):
-    """通用抓取影片發布/發行日期"""
     for label in ["發行日期", "發布日期", "上映日期", "更新日期"]:
         val = extract_field_after_label(soup, label)
         if val:
@@ -518,7 +518,6 @@ def extract_release_date(soup):
             if m:
                 return m.group(1).replace('/', '-')
     
-    # 從 meta 標籤檢索
     for prop in ["og:release_date", "video:release_date", "upload_date"]:
         meta = soup.select_one(f'meta[property="{prop}"], meta[name="{prop}"]')
         if meta and meta.get("content"):
@@ -526,7 +525,6 @@ def extract_release_date(soup):
             if m:
                 return m.group(1).replace('/', '-')
 
-    # 從日期文字節點檢索
     for node in soup.find_all(string=re.compile(r'\b20\d{2}[-/]\d{2}[-/]\d{2}\b')):
         text = node.strip()
         if not any(k in text.lower() for k in ["copyright", "rights"]):
@@ -564,7 +562,7 @@ async def run_scraper():
             page = await context.new_page()
 
             # ==========================================
-            # 0️⃣ Jable 首頁預熱 (獲取 cf_clearance 通行 Cookie)
+            # 0️⃣ Jable 首頁預熱
             # ==========================================
             print("🌐 正在連線 Jable.tv 首頁預熱與建立連線憑證...")
             await safe_navigate(page, "https://jable.tv/", is_category=False, max_retries=2)
@@ -662,7 +660,7 @@ async def run_scraper():
                 for a in soup.find_all('a', href=True):
                     href = a.get('href', '').strip()
                     
-                    if any(p in href for p in ['/genres/', '/tags/', '/actresses/', '/actress/', '/makers/', '/series/', '/dm', 'login', 'search', 'page=']):
+                    if any(p in href for p in ['/genres/', '/tags/', '/actresses/', '/actress/', '/makers/', '/series/', 'login', 'search', 'page=']):
                         continue
                     
                     if re.search(r'[a-zA-Z0-9]+-\d+', href):
@@ -697,17 +695,17 @@ async def run_scraper():
                             if v_tag and v_tag.get('poster'):
                                 cover_image_url = v_tag['poster']
 
-                        # 3. 女優名稱：抓取「女優: 」後面的字串
+                        # 3. 女優名稱
                         actress_name = extract_field_after_label(detail_soup, "女優")
                         if not actress_name:
                             actress_elems = detail_soup.select('a[href*="/actresses/"], a[href*="/actress/"]')
                             actresses = [a.text.strip() for a in actress_elems if a.text.strip()]
                             actress_name = ", ".join(list(dict.fromkeys(actresses))) if actresses else "未知"
 
-                        # 4. 發布日期：抓取「發行日期: 」後面的字串
+                        # 4. 發布日期
                         release_date = extract_field_after_label(detail_soup, "發行日期") or extract_release_date(detail_soup)
 
-                        # 5. 類型標籤：抓取「類型: 」後面的字串
+                        # 5. 類型標籤
                         tags_str = extract_field_after_label(detail_soup, "類型")
                         if not tags_str:
                             genre_elems = detail_soup.select('a[href*="/genres/"]')
@@ -717,7 +715,6 @@ async def run_scraper():
                         tags_lower = tags_str.lower()
                         has_genre_match = any(kw in tags_lower for kw in target_genre_keywords)
 
-                        # 輔助比對 slug 避免語系轉為英文
                         if not has_genre_match:
                             for g in detail_soup.select('a[href*="/genres/"]'):
                                 g_href = g.get('href', '').lower()
