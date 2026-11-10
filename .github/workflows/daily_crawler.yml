@@ -2,17 +2,14 @@ name: Daily Video Scraper
 
 on:
   schedule:
-    # UTC 21:00 對應台灣時間 早上 05:00
-    # UTC 14:00 對應台灣時間 晚上 22:00
-    - cron: '0 14,21 * * *'
-  workflow_dispatch: # 支援手動按鈕執行
+    - cron: '0 14,21 * * *' # 台灣時間 06:00 與 22:00
+  workflow_dispatch:
 
 permissions:
-  contents: write    # 允許提交資料庫與 index.html 回儲存庫
-  pages: write       # 允許直接發布至 GitHub Pages
-  id-token: write    # 部署 GitHub Pages 所需的身份權限
+  contents: write
+  pages: write
+  id-token: write
 
-# 確保同一時間只有一個 Pages 部署任務在執行
 concurrency:
   group: "pages"
   cancel-in-progress: false
@@ -26,7 +23,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: true
-          fetch-depth: 1
+          fetch-depth: 0
 
       - name: 設定 Python 環境
         uses: actions/setup-python@v5
@@ -58,21 +55,18 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git stash || true
-          git pull origin main --rebase || true
-          git stash pop || true
           git add index.html || true
           if [ -f "videos.db" ]; then git add videos.db; fi
-          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update database and index.html" && git push)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update database and index.html" && git push origin main)
 
-      - name: 設定 GitHub Pages 資源環境
+      - name: 設定 GitHub Pages 環境
         uses: actions/configure-pages@v5
 
-      - name: 打包網頁檔案 (Artifact)
+      - name: 打包網頁產物
         uses: actions/upload-pages-artifact@v3
         with:
-          path: '.' # 將包含 index.html 的根目錄進行封裝上傳
+          path: '.'
 
-      - name: 直接發布至 GitHub Pages
+      - name: 直發至 GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
