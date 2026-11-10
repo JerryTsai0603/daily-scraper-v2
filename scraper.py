@@ -16,7 +16,6 @@ from bs4 import BeautifulSoup
 import gspread
 from google.oauth2.service_account import Credentials
 
-# 即時輸出終端機日誌至 GitHub Actions
 print = functools.partial(print, flush=True)
 
 DB_FILE = "videos.db"
@@ -46,7 +45,6 @@ def init_db():
     if "release_date" not in columns:
         cursor.execute("ALTER TABLE videos ADD COLUMN release_date TEXT")
     
-    # 清理非影片的分類或無效路徑
     cursor.execute("""
         DELETE FROM videos 
         WHERE video_url LIKE '%/genres/%'
@@ -63,7 +61,6 @@ def init_db():
 def save_video(title, cover_url, tags, actress, video_url, release_date=""):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    # 清理標題中的換行與異常空格
     clean_title = re.sub(r'\s+', ' ', title).strip()
     try:
         cursor.execute("""
@@ -151,6 +148,7 @@ def generate_index_html():
     all_actresses = set()
     all_tags_set = set()
     cards_html = ""
+    current_build_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     for v in videos:
         vid_id, title, cover_url, tags, actress, video_url, release_date, created_at = v
@@ -168,12 +166,10 @@ def generate_index_html():
                 if cleaned_tag and cleaned_tag != "一般":
                     all_tags_set.add(cleaned_tag)
 
-        crawled_date_str = created_at[:10] if created_at else ""
         crawled_full = created_at if created_at else ""
-        release_date_str = release_date.strip() if release_date and release_date.strip() else crawled_date_str
+        release_date_str = release_date.strip() if release_date and release_date.strip() else (crawled_full[:10] if crawled_full else "")
         cover_img = cover_url if cover_url else "https://via.placeholder.com/300x180?text=No+Cover"
 
-        # 關鍵安全跳脫：防止標題引號破壞 HTML 屬性
         safe_title_attr = html.escape(title.lower(), quote=True)
         safe_title_text = html.escape(title)
         safe_actress_attr = html.escape(actress_display.lower(), quote=True)
@@ -190,7 +186,7 @@ def generate_index_html():
                     <span class="badge actress-badge">👩 {safe_actress_text}</span>
                     <span class="date" title="影片發布日期">📅 {release_date_str}</span>
                 </div>
-                <div class="crawled-time">🕒 爬取時間: {crawled_date_str}</div>
+                <div class="crawled-time">🕒 爬取時間: {crawled_full}</div>
                 <div class="tags" title="{safe_tags_attr}">🏷️ {safe_tags_text}</div>
                 <div class="footer">
                     <a href="{video_url}" target="_blank" class="btn">前往觀看</a>
@@ -211,6 +207,10 @@ def generate_index_html():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 🚫 強制防快取 Meta 標籤 -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Jable & MissAv 影片自動典藏庫 - 智慧篩選</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -218,12 +218,15 @@ def generate_index_html():
         .header { text-align: center; margin-bottom: 24px; }
         .header h1 { font-size: 1.8rem; color: #38bdf8; margin-bottom: 6px; }
         .header p { color: #94a3b8; font-size: 0.9rem; }
+        .build-time { font-size: 0.82rem; color: #38bdf8; margin-top: 6px; font-weight: 500; }
         .filter-panel { max-width: 1400px; margin: 0 auto 28px auto; background: #1e293b; padding: 18px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; flex-direction: column; gap: 16px; }
-        .filter-row { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between; }
+        .filter-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; }
         .filter-group { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; flex-grow: 1; }
         .filter-item { display: flex; align-items: center; gap: 8px; }
-        .filter-item label { font-size: 0.85rem; color: #94a3b8; }
-        .filter-item select { background: #0f172a; border: 1px solid #334155; color: #f1f5f9; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; outline: none; }
+        .filter-item label { font-size: 0.85rem; color: #94a3b8; white-space: nowrap; }
+        .filter-item select, .search-box { background: #0f172a; border: 1px solid #334155; color: #f1f5f9; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; outline: none; }
+        .search-box { width: 280px; transition: border-color 0.2s; }
+        .search-box:focus { border-color: #38bdf8; }
         .checkbox-container { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; background: #0f172a; padding: 10px 14px; border-radius: 6px; border: 1px solid #334155; max-height: 140px; overflow-y: auto; flex-grow: 1; }
         .checkbox-label { font-size: 0.85rem; color: #cbd5e1; display: flex; align-items: center; gap: 4px; cursor: pointer; }
         .checkbox-label input { cursor: pointer; }
@@ -250,8 +253,18 @@ def generate_index_html():
     <div class="header">
         <h1>Jable & MissAv 影片自動典藏庫</h1>
         <p>目前庫存 <span id="total-count">{total_count}</span> 部影片 | 篩選顯示 <span id="visible-count">{visible_count}</span> 部</p>
+        <div class="build-time">🕒 最後更新時間：{build_time}</div>
     </div>
     <div class="filter-panel">
+        <div class="filter-row">
+            <div class="filter-group">
+                <div class="filter-item">
+                    <label for="search-input">🔍 番號/關鍵字搜尋:</label>
+                    <input type="text" id="search-input" class="search-box" placeholder="輸入番號或片名 (例: IPZZ-963)">
+                </div>
+            </div>
+            <button class="reset-btn" onclick="resetFilters()">重設條件</button>
+        </div>
         <div class="filter-row">
             <div class="filter-group">
                 <div class="filter-item" style="width: 100%;">
@@ -261,7 +274,6 @@ def generate_index_html():
                     </div>
                 </div>
             </div>
-            <button class="reset-btn" onclick="resetFilters()">重設條件</button>
         </div>
         <div class="filter-row">
             <div class="filter-group">
@@ -289,6 +301,7 @@ def generate_index_html():
         <div class="empty-msg" id="empty-msg">查無符合條件的影片</div>
     </div>
     <script>
+        const searchInput = document.getElementById('search-input');
         const keywordCheckboxes = document.querySelectorAll('input[name="keyword"]');
         const actressSelect = document.getElementById('actress-select');
         const sortSelect = document.getElementById('sort-select');
@@ -298,6 +311,7 @@ def generate_index_html():
         const cards = Array.from(document.querySelectorAll('.card'));
 
         function applyFilter() {
+            const query = searchInput.value.trim().toLowerCase();
             const selectedKeywords = Array.from(keywordCheckboxes)
                 .filter(cb => cb.checked)
                 .map(cb => cb.value.toLowerCase());
@@ -305,13 +319,15 @@ def generate_index_html():
             
             let visibleCount = 0;
             cards.forEach(card => {
+                const title = card.getAttribute('data-title') || '';
                 const actress = card.getAttribute('data-actress') || '';
                 const tags = card.getAttribute('data-tags') || '';
                 
+                const matchSearch = !query || title.includes(query) || actress.includes(query);
                 const matchKeyword = selectedKeywords.length === 0 || selectedKeywords.some(kw => tags.includes(kw));
                 const matchActress = !actressVal || actress.includes(actressVal);
 
-                if (matchKeyword && matchActress) {
+                if (matchSearch && matchKeyword && matchActress) {
                     card.style.display = 'flex';
                     visibleCount++;
                 } else {
@@ -345,6 +361,7 @@ def generate_index_html():
         }
 
         function resetFilters() {
+            searchInput.value = '';
             keywordCheckboxes.forEach(cb => cb.checked = false);
             actressSelect.value = '';
             sortSelect.value = 'crawled-desc';
@@ -352,6 +369,7 @@ def generate_index_html():
             applyFilter();
         }
 
+        searchInput.addEventListener('input', applyFilter);
         keywordCheckboxes.forEach(cb => cb.addEventListener('change', applyFilter));
         actressSelect.addEventListener('change', applyFilter);
         sortSelect.addEventListener('change', () => { applySort(); applyFilter(); });
@@ -364,13 +382,14 @@ def generate_index_html():
 """
     html_content = html_template.replace("{total_count}", str(len(videos))) \
                                 .replace("{visible_count}", str(len(videos))) \
+                                .replace("{build_time}", current_build_time) \
                                 .replace("{checkboxes_html}", checkboxes_html) \
                                 .replace("{actress_options}", actress_options) \
                                 .replace("{cards_html}", cards_html)
 
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(html_content)
-    print(f"✅ 已成功產出最新動態 index.html（共收錄 {len(videos)} 部影片）")
+    print(f"✅ 已成功產出最新動態 index.html（共收錄 {len(videos)} 部影片，更新時間: {current_build_time}）")
 
 def send_email_report(new_videos):
     if not new_videos or not SENDER_EMAIL or not SENDER_PASSWORD:
