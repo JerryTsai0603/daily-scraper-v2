@@ -2,9 +2,9 @@ name: Daily Video Scraper
 
 on:
   schedule:
-    # UTC 22:00 對應台灣時間 早上 06:00
+    # UTC 21:00 對應台灣時間 早上 05:00
     # UTC 14:00 對應台灣時間 晚上 22:00
-    - cron: '0 14,22 * * *'
+    - cron: '0 14,21 * * *'
   workflow_dispatch: # 支援手動按鈕執行
 
 permissions:
