@@ -7,7 +7,7 @@ import re
 import random
 import functools
 import html
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from playwright.async_api import async_playwright
@@ -16,7 +16,15 @@ from bs4 import BeautifulSoup
 import gspread
 from google.oauth2.service_account import Credentials
 
+# 即時輸出終端機日誌至 GitHub Actions
 print = functools.partial(print, flush=True)
+
+# 🇹🇼 定義台灣時區 (UTC+8)
+TAIWAN_TZ = timezone(timedelta(hours=8))
+
+def get_taiwan_now_str(fmt="%Y-%m-%d %H:%M:%S"):
+    """取得當前台灣時間字串"""
+    return datetime.now(TAIWAN_TZ).strftime(fmt)
 
 DB_FILE = "videos.db"
 RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL", "edgedge0603@gmail.com")
@@ -35,7 +43,7 @@ def init_db():
             actress TEXT,
             video_url TEXT UNIQUE,
             release_date TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TEXT
         )
     """)
     cursor.execute("PRAGMA table_info(videos)")
@@ -45,6 +53,7 @@ def init_db():
     if "release_date" not in columns:
         cursor.execute("ALTER TABLE videos ADD COLUMN release_date TEXT")
     
+    # 清理非影片的分類或無效路徑
     cursor.execute("""
         DELETE FROM videos 
         WHERE video_url LIKE '%/genres/%'
@@ -62,18 +71,19 @@ def save_video(title, cover_url, tags, actress, video_url, release_date=""):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     clean_title = re.sub(r'\s+', ' ', title).strip()
+    tw_now = get_taiwan_now_str()
     try:
         cursor.execute("""
             INSERT INTO videos (title, cover_url, tags, actress, video_url, release_date, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(video_url) DO UPDATE SET
                 title = excluded.title,
                 cover_url = CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE videos.cover_url END,
                 tags = CASE WHEN excluded.tags != '' AND excluded.tags != '一般' THEN excluded.tags ELSE videos.tags END,
                 actress = CASE WHEN excluded.actress != '' AND excluded.actress != '未知' THEN excluded.actress ELSE videos.actress END,
                 release_date = CASE WHEN excluded.release_date != '' THEN excluded.release_date ELSE videos.release_date END,
-                created_at = datetime('now', 'localtime')
-        """, (clean_title, cover_url, tags, actress, video_url, release_date))
+                created_at = excluded.created_at
+        """, (clean_title, cover_url, tags, actress, video_url, release_date, tw_now))
         conn.commit()
         return cursor.rowcount > 0
     finally:
@@ -109,7 +119,7 @@ def sync_to_google_sheet(new_videos):
         existing_rows = sheet.get_all_values()
 
         if not existing_rows:
-            sheet.append_row(["標題", "女優", "標籤", "發布日期", "影片連結", "封面圖片", "爬取時間"])
+            sheet.append_row(["標題", "女優", "標籤", "發布日期(台灣時間)", "影片連結", "封面圖片", "爬取時間(台灣時間)"])
             existing_urls = set()
             current_row_index = 2
         else:
@@ -124,7 +134,7 @@ def sync_to_google_sheet(new_videos):
             if video_url not in existing_urls:
                 image_formula = f'=IMAGE("{cover_url}")' if cover_url else ""
                 sheet.append_row([
-                    title, actress or "未知", tags or "", release_date or "", video_url, image_formula, created_at
+                    title, actress or "未知", tags or "", release_date or "未知", video_url, image_formula, created_at
                 ], value_input_option='USER_ENTERED')
                 
                 try:
@@ -148,7 +158,7 @@ def generate_index_html():
     all_actresses = set()
     all_tags_set = set()
     cards_html = ""
-    current_build_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    current_build_time = get_taiwan_now_str()
     
     for v in videos:
         vid_id, title, cover_url, tags, actress, video_url, release_date, created_at = v
@@ -167,7 +177,7 @@ def generate_index_html():
                     all_tags_set.add(cleaned_tag)
 
         crawled_full = created_at if created_at else ""
-        release_date_str = release_date.strip() if release_date and release_date.strip() else (crawled_full[:10] if crawled_full else "")
+        release_date_str = release_date.strip() if release_date and release_date.strip() else "未知"
         cover_img = cover_url if cover_url else "https://via.placeholder.com/300x180?text=No+Cover"
 
         safe_title_attr = html.escape(title.lower(), quote=True)
@@ -184,9 +194,9 @@ def generate_index_html():
                 <div class="title" title="{safe_title_attr}">{safe_title_text}</div>
                 <div class="meta-row">
                     <span class="badge actress-badge">👩 {safe_actress_text}</span>
-                    <span class="date" title="影片發布日期">📅 {release_date_str}</span>
+                    <span class="date" title="影片上架/發行日期 (台灣時間)">📅 {release_date_str}</span>
                 </div>
-                <div class="crawled-time">🕒 爬取時間: {crawled_full}</div>
+                <div class="crawled-time">🕒 爬取時間 (台灣): {crawled_full}</div>
                 <div class="tags" title="{safe_tags_attr}">🏷️ {safe_tags_text}</div>
                 <div class="footer">
                     <a href="{video_url}" target="_blank" class="btn">前往觀看</a>
@@ -207,18 +217,17 @@ def generate_index_html():
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- 🚫 強制防快取 Meta 標籤 -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>Jable & MissAv 影片自動典藏庫 - 智慧篩選</title>
+    <title>Jable & MissAv 影片自動典藏庫 - 台灣時間 (UTC+8)</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #0b0f19; color: #f8fafc; padding: 24px 16px; }
         .header { text-align: center; margin-bottom: 24px; }
         .header h1 { font-size: 1.8rem; color: #38bdf8; margin-bottom: 6px; }
         .header p { color: #94a3b8; font-size: 0.9rem; }
-        .build-time { font-size: 0.82rem; color: #38bdf8; margin-top: 6px; font-weight: 500; }
+        .build-time { font-size: 0.85rem; color: #38bdf8; margin-top: 6px; font-weight: 500; }
         .filter-panel { max-width: 1400px; margin: 0 auto 28px auto; background: #1e293b; padding: 18px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); display: flex; flex-direction: column; gap: 16px; }
         .filter-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; }
         .filter-group { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; flex-grow: 1; }
@@ -253,13 +262,13 @@ def generate_index_html():
     <div class="header">
         <h1>Jable & MissAv 影片自動典藏庫</h1>
         <p>目前庫存 <span id="total-count">{total_count}</span> 部影片 | 篩選顯示 <span id="visible-count">{visible_count}</span> 部</p>
-        <div class="build-time">🕒 最後更新時間：{build_time}</div>
+        <div class="build-time">🕒 最後更新時間 (台灣時間): {build_time}</div>
     </div>
     <div class="filter-panel">
         <div class="filter-row">
             <div class="filter-group">
                 <div class="filter-item">
-                    <label for="search-input">🔍 番號/關鍵字搜尋:</label>
+                    <label for="search-input">🔍 番號/片名搜尋:</label>
                     <input type="text" id="search-input" class="search-box" placeholder="輸入番號或片名 (例: IPZZ-963)">
                 </div>
             </div>
@@ -289,8 +298,8 @@ def generate_index_html():
                     <select id="sort-select">
                         <option value="crawled-desc" selected>爬取時間：最新 → 最舊 (預設)</option>
                         <option value="crawled-asc">爬取時間：最舊 → 最新</option>
-                        <option value="release-desc">影片發布：最新 → 最舊</option>
-                        <option value="release-asc">影片發布：最舊 → 最新</option>
+                        <option value="release-desc">影片上架：最新 → 最舊</option>
+                        <option value="release-asc">影片上架：最舊 → 最新</option>
                     </select>
                 </div>
             </div>
@@ -351,8 +360,12 @@ def generate_index_html():
                 } else if (sortMode === 'crawled-asc') {
                     return crawledA.localeCompare(crawledB);
                 } else if (sortMode === 'release-desc') {
+                    if (releaseA === '未知' && releaseB !== '未知') return 1;
+                    if (releaseB === '未知' && releaseA !== '未知') return -1;
                     return releaseB.localeCompare(releaseA) || crawledB.localeCompare(crawledA);
                 } else if (sortMode === 'release-asc') {
+                    if (releaseA === '未知' && releaseB !== '未知') return 1;
+                    if (releaseB === '未知' && releaseA !== '未知') return -1;
                     return releaseA.localeCompare(releaseB) || crawledA.localeCompare(crawledB);
                 }
                 return 0;
@@ -389,7 +402,7 @@ def generate_index_html():
 
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(html_content)
-    print(f"✅ 已成功產出最新動態 index.html（共收錄 {len(videos)} 部影片，更新時間: {current_build_time}）")
+    print(f"✅ 已成功產出最新動態 index.html（共收錄 {len(videos)} 部影片，台灣時間: {current_build_time}）")
 
 def send_email_report(new_videos):
     if not new_videos or not SENDER_EMAIL or not SENDER_PASSWORD:
@@ -399,10 +412,11 @@ def send_email_report(new_videos):
         f"""<div style="border:1px solid #e2e8f0; border-radius:8px; padding:12px; margin-bottom:12px;">
             <img src="{v['cover_url']}" style="width:160px; height:100px; object-fit:cover; border-radius:4px;" referrerpolicy="no-referrer">
             <h4 style="margin:6px 0;">{v['title']} (女優: {v['actress']})</h4>
+            <p style="margin:4px 0; color:#64748b; font-size:12px;">上架日期: {v.get('release_date', '未知')}</p>
             <a href="{v['video_url']}" target="_blank">前往觀看</a>
         </div>""" for v in new_videos
     ])
-    html_content = f"<h2>今日更新通知</h2><p>本次新增 <strong>{len(new_videos)}</strong> 部：</p>{items_html}"
+    html_content = f"<h2>今日更新通知 (台灣時間: {get_taiwan_now_str()})</h2><p>本次新增 <strong>{len(new_videos)}</strong> 部：</p>{items_html}"
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -529,25 +543,53 @@ def extract_field_after_label(soup, label):
                 return val.strip()
     return ""
 
-def extract_release_date(soup):
-    for label in ["發行日期", "發布日期", "上映日期", "更新日期"]:
+def extract_jable_release_date(detail_soup, card_sub_title=""):
+    """專門精準擷取 Jable 影片上架/發布日期（轉換為台灣日期格式 YYYY-MM-DD）"""
+    # 1. 從影片內頁的 info-header 尋找日期
+    for container in detail_soup.select('.info-header, .video-info, .header-tags, div.header-left'):
+        for s in container.find_all(['span', 'p', 'div']):
+            text = s.get_text(strip=True)
+            m = re.search(r'\b(20\d{2}[-/]\d{2}[-/]\d{2})\b', text)
+            if m:
+                return m.group(1).replace('/', '-')
+            
+            # 相對時間換算（以台灣目前日期為基準）
+            tw_today = datetime.now(TAIWAN_TZ).date()
+            m_days = re.search(r'(\d+)\s*天前', text)
+            if m_days:
+                return str(tw_today - timedelta(days=int(m_days.group(1))))
+            m_months = re.search(r'(\d+)\s*個月前', text)
+            if m_months:
+                return str(tw_today - timedelta(days=int(m_months.group(1)) * 30))
+            m_years = re.search(r'(\d+)\s*年前', text)
+            if m_years:
+                return str(tw_today - timedelta(days=int(m_years.group(1)) * 365))
+
+    # 2. 回退到列表頁卡片上的子標題文字
+    if card_sub_title:
+        m = re.search(r'\b(20\d{2}[-/]\d{2}[-/]\d{2})\b', card_sub_title)
+        if m:
+            return m.group(1).replace('/', '-')
+        tw_today = datetime.now(TAIWAN_TZ).date()
+        m_days = re.search(r'(\d+)\s*天前', card_sub_title)
+        if m_days:
+            return str(tw_today - timedelta(days=int(m_days.group(1))))
+
+    return ""
+
+def extract_missav_release_date(soup):
+    """專門精準擷取 MissAv 影片發行日期"""
+    for label in ["發行日期", "發布日期", "上映日期"]:
         val = extract_field_after_label(soup, label)
         if val:
             m = re.search(r'\b(20\d{2}[-/]\d{2}[-/]\d{2})\b', val)
             if m:
                 return m.group(1).replace('/', '-')
     
-    for prop in ["og:release_date", "video:release_date", "upload_date"]:
+    for prop in ["og:release_date", "video:release_date"]:
         meta = soup.select_one(f'meta[property="{prop}"], meta[name="{prop}"]')
         if meta and meta.get("content"):
             m = re.search(r'\b(20\d{2}[-/]\d{2}[-/]\d{2})\b', meta["content"])
-            if m:
-                return m.group(1).replace('/', '-')
-
-    for node in soup.find_all(string=re.compile(r'\b20\d{2}[-/]\d{2}[-/]\d{2}\b')):
-        text = node.strip()
-        if not any(k in text.lower() for k in ["copyright", "rights"]):
-            m = re.search(r'\b(20\d{2}[-/]\d{2}[-/]\d{2})\b', text)
             if m:
                 return m.group(1).replace('/', '-')
     return ""
@@ -583,14 +625,14 @@ async def run_scraper():
             # ==========================================
             # 0️⃣ Jable 首頁預熱
             # ==========================================
-            print("🌐 正在連線 Jable.tv 首頁預熱與建立連線憑證...")
+            print(f"🌐 [{get_taiwan_now_str()}] 正在連線 Jable.tv 首頁預熱與建立連線憑證...")
             await safe_navigate(page, "https://jable.tv/", is_category=False, max_retries=2)
             await page.wait_for_timeout(3000)
 
             # ==========================================
             # 1️⃣ 爬取 Jable.tv (前 2 頁)
             # ==========================================
-            print("🌐 開始掃描 Jable.tv 清單頁...")
+            print(f"🌐 [{get_taiwan_now_str()}] 開始掃描 Jable.tv 清單頁...")
             for page_num in range(1, 3):
                 target_url = "https://jable.tv/categories/chinese-subtitle/" if page_num == 1 else f"https://jable.tv/categories/chinese-subtitle/{page_num}/"
                 print(f"正在掃描 Jable 第 {page_num}/2 頁: {target_url}")
@@ -615,6 +657,10 @@ async def run_scraper():
                     link_elem = box.find('a', href=True)
                     if link_elem and '/videos/' in link_elem['href']:
                         full_url = link_elem['href'] if link_elem['href'].startswith('http') else f"https://jable.tv{link_elem['href']}"
+                        
+                        sub_title_span = box.select_one('.sub-title, .inactive-color')
+                        card_sub_title = sub_title_span.get_text(strip=True) if sub_title_span else ""
+
                         if full_url not in seen_urls:
                             seen_urls.add(full_url)
                             try:
@@ -630,7 +676,9 @@ async def run_scraper():
 
                                 parts = video_title.split()
                                 actress_name = parts[-1].strip() if parts else "未知"
-                                release_date = extract_release_date(detail_soup)
+                                
+                                # 🎯 精準擷取 Jable 上架日期
+                                release_date = extract_jable_release_date(detail_soup, card_sub_title)
 
                                 tag_links = detail_soup.select('h5.tags.h6-md a[href]')
                                 tags_list = []
@@ -650,16 +698,17 @@ async def run_scraper():
                                     if save_video(video_title, cover_image_url, tags_str, actress_name, full_url, release_date):
                                         newly_added_videos.append({
                                             "title": video_title, "cover_url": cover_image_url,
-                                            "tags": tags_str, "actress": actress_name, "video_url": full_url
+                                            "tags": tags_str, "actress": actress_name, "video_url": full_url,
+                                            "release_date": release_date
                                         })
-                                        print(f"  🎯 [Jable 收錄] {video_title} (發布: {release_date or '未知'}) (標籤: {tags_str})")
+                                        print(f"  🎯 [Jable 收錄] {video_title} (上架: {release_date or '未知'}) (標籤: {tags_str})")
                             except Exception:
                                 continue
 
             # ==========================================
             # 2️⃣ 爬取 MissAv (第 1 頁與第 2 頁)
             # ==========================================
-            print("🌐 開始掃描 MissAv (https://missav.ws/dm278/chinese-subtitle)...")
+            print(f"🌐 [{get_taiwan_now_str()}] 開始掃描 MissAv (https://missav.ws/dm278/chinese-subtitle)...")
             for page_num in range(1, 3):
                 missav_url = "https://missav.ws/dm278/chinese-subtitle" if page_num == 1 else f"https://missav.ws/dm278/chinese-subtitle?page={page_num}"
                 print(f"正在掃描 MissAv 第 {page_num}/2 頁: {missav_url}")
@@ -721,8 +770,8 @@ async def run_scraper():
                             actresses = [a.text.strip() for a in actress_elems if a.text.strip()]
                             actress_name = ", ".join(list(dict.fromkeys(actresses))) if actresses else "未知"
 
-                        # 4. 發布日期
-                        release_date = extract_field_after_label(detail_soup, "發行日期") or extract_release_date(detail_soup)
+                        # 4. 🎯 精準擷取 MissAv 發布日期
+                        release_date = extract_missav_release_date(detail_soup)
 
                         # 5. 類型標籤
                         tags_str = extract_field_after_label(detail_soup, "類型")
@@ -745,7 +794,8 @@ async def run_scraper():
                             if save_video(video_title, cover_image_url, tags_str, actress_name, video_url, release_date):
                                 newly_added_videos.append({
                                     "title": video_title, "cover_url": cover_image_url,
-                                    "tags": tags_str, "actress": actress_name, "video_url": video_url
+                                    "tags": tags_str, "actress": actress_name, "video_url": video_url,
+                                    "release_date": release_date
                                 })
                                 print(f"  🎯 [MissAv 成功收錄] {video_title} (女優: {actress_name}) (發布: {release_date or '未知'}) (類型: {tags_str})")
                         else:
@@ -755,7 +805,7 @@ async def run_scraper():
                         print(f"    ⚠️ 解析 MissAv 內頁失敗 ({video_url}): {e}")
                         continue
 
-            print(f"✅ 雙平台爬取結束！總共新收錄 {len(newly_added_videos)} 部影片")
+            print(f"✅ 雙平台爬取結束！總共收錄/更新 {len(newly_added_videos)} 部影片")
             
             sync_to_google_sheet(newly_added_videos)
             generate_index_html()
