@@ -72,8 +72,8 @@ def init_db():
 def save_video(title, cover_url, tags, actress, video_url, release_date="", custom_created_at=None):
     """
     儲存影片至資料庫：
-    - 若為「符合條件的新影片」：寫入最新台灣時間，回傳 True（自動排在最前面）
-    - 若為「已收錄過的舊影片」：僅補齊缺漏欄位並保留原收錄時間，回傳 False（不影響新片置頂排序）
+    - 若為「符合條件的新影片」：寫入最新台灣時間，回傳 True（列入新收錄優先區）
+    - 若為「已收錄過的舊影片」：僅補齊缺漏欄位並保留原收錄時間，回傳 False
     """
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -115,7 +115,6 @@ def save_video(title, cover_url, tags, actress, video_url, release_date="", cust
 def get_all_videos():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    # 依最新收錄時間由新到舊排序，確保新發現的影片永遠在最前面
     cursor.execute("""
         SELECT id, title, cover_url, tags, actress, video_url, COALESCE(release_date, ''), created_at 
         FROM videos 
@@ -184,8 +183,27 @@ def generate_index_html():
     cards_html = ""
     now_tw = get_taiwan_now()
     current_build_time = now_tw.strftime("%Y-%m-%d %H:%M:%S")
+
+    def check_is_new(created_at_str):
+        if not created_at_str:
+            return False
+        try:
+            crawled_dt = datetime.strptime(created_at_str[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=TAIWAN_TZ)
+            return (now_tw - crawled_dt).total_seconds() <= 86400
+        except Exception:
+            return False
+
+    # 雙層排序：1. 新收錄優先 -> 2. 上架時間由新到舊（未知排最後） -> 3. 收錄時間由新到舊
+    def video_sort_key(v):
+        vid_id, title, cover_url, tags, actress, video_url, release_date, created_at = v
+        is_new_flag = 1 if check_is_new(created_at) else 0
+        rel_clean = (release_date or "").strip()
+        rel_sort_val = rel_clean if (rel_clean and rel_clean != "未知") else "0000-00-00"
+        return (is_new_flag, rel_sort_val, created_at or "", vid_id)
+
+    sorted_videos = sorted(videos, key=video_sort_key, reverse=True)
     
-    for v in videos:
+    for v in sorted_videos:
         vid_id, title, cover_url, tags, actress, video_url, release_date, created_at = v
         
         actress_display = actress.strip() if actress and actress.strip() else "未知/多人"
@@ -205,16 +223,8 @@ def generate_index_html():
         release_date_str = release_date.strip() if release_date and release_date.strip() else "未知"
         cover_img = cover_url if cover_url else "https://via.placeholder.com/300x180?text=No+Cover"
 
-        # 判斷是否為 24 小時內新收錄的影片，顯示醒目標籤
-        is_recent_new = False
-        if crawled_full:
-            try:
-                crawled_dt = datetime.strptime(crawled_full[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=TAIWAN_TZ)
-                if (now_tw - crawled_dt).total_seconds() <= 86400:
-                    is_recent_new = True
-            except Exception:
-                pass
-
+        is_recent_new = check_is_new(crawled_full)
+        is_new_attr = "1" if is_recent_new else "0"
         new_badge_html = '<span class="new-badge">🆕 新收錄</span>' if is_recent_new else ''
 
         safe_title_attr = html.escape(title.lower(), quote=True)
@@ -225,7 +235,7 @@ def generate_index_html():
         safe_tags_text = html.escape(tags or '無標籤')
 
         cards_html += f"""
-        <div class="card{' card-new' if is_recent_new else ''}" data-title="{safe_title_attr}" data-actress="{safe_actress_attr}" data-tags="{safe_tags_attr}" data-release="{release_date_str}" data-crawled="{crawled_full}">
+        <div class="card{' card-new' if is_recent_new else ''}" data-is-new="{is_new_attr}" data-title="{safe_title_attr}" data-actress="{safe_actress_attr}" data-tags="{safe_tags_attr}" data-release="{release_date_str}" data-crawled="{crawled_full}">
             <div class="img-wrapper">
                 {new_badge_html}
                 <img src="{cover_img}" alt="封面" loading="lazy" referrerpolicy="no-referrer">
@@ -339,7 +349,8 @@ def generate_index_html():
                 <div class="filter-item">
                     <label for="sort-select">排序方式:</label>
                     <select id="sort-select">
-                        <option value="crawled-desc" selected>新收錄優先：最新 → 最舊 (預設)</option>
+                        <option value="new-release-desc" selected>新收錄優先 → 上架時間由新到舊 (預設)</option>
+                        <option value="crawled-desc">收錄時間：最新 → 最舊</option>
                         <option value="crawled-asc">收錄時間：最舊 → 最新</option>
                         <option value="release-desc">影片上架：最新 → 最舊</option>
                         <option value="release-asc">影片上架：最舊 → 最新</option>
@@ -393,12 +404,23 @@ def generate_index_html():
         function applySort() {
             const sortMode = sortSelect.value;
             const sortedCards = cards.slice().sort((a, b) => {
+                const isNewA = parseInt(a.getAttribute('data-is-new') || '0', 10);
+                const isNewB = parseInt(b.getAttribute('data-is-new') || '0', 10);
                 const crawledA = a.getAttribute('data-crawled') || '';
                 const crawledB = b.getAttribute('data-crawled') || '';
                 const releaseA = a.getAttribute('data-release') || '';
                 const releaseB = b.getAttribute('data-release') || '';
 
-                if (sortMode === 'crawled-desc') {
+                if (sortMode === 'new-release-desc') {
+                    // 1. 先依新收錄優先排序
+                    if (isNewB !== isNewA) return isNewB - isNewA;
+                    // 2. 再依上架時間由新到舊排序（未知排最後）
+                    const validRelA = (releaseA && releaseA !== '未知') ? releaseA : '0000-00-00';
+                    const validRelB = (releaseB && releaseB !== '未知') ? releaseB : '0000-00-00';
+                    if (validRelB !== validRelA) return validRelB.localeCompare(validRelA);
+                    // 3. 上架時間相同則依收錄時間由新到舊
+                    return crawledB.localeCompare(crawledA);
+                } else if (sortMode === 'crawled-desc') {
                     return crawledB.localeCompare(crawledA);
                 } else if (sortMode === 'crawled-asc') {
                     return crawledA.localeCompare(crawledB);
@@ -420,7 +442,7 @@ def generate_index_html():
             searchInput.value = '';
             keywordCheckboxes.forEach(cb => cb.checked = false);
             actressSelect.value = '';
-            sortSelect.value = 'crawled-desc';
+            sortSelect.value = 'new-release-desc';
             applySort();
             applyFilter();
         }
@@ -450,16 +472,22 @@ def generate_index_html():
 def send_email_report(new_videos):
     if not new_videos or not SENDER_EMAIL or not SENDER_PASSWORD:
         return
-    subject = f"【每日影片爬蟲報告】今日新發現 {len(new_videos)} 部符合條件的影片"
+    # 寄送通知信時也依上架時間由新到舊排序
+    sorted_new = sorted(
+        new_videos,
+        key=lambda x: x.get('release_date') if (x.get('release_date') and x.get('release_date') != '未知') else '0000-00-00',
+        reverse=True
+    )
+    subject = f"【每日影片爬蟲報告】今日新發現 {len(sorted_new)} 部符合條件的影片"
     items_html = "".join([
         f"""<div style="border:1px solid #e2e8f0; border-radius:8px; padding:12px; margin-bottom:12px;">
             <img src="{v['cover_url']}" style="width:160px; height:100px; object-fit:cover; border-radius:4px;" referrerpolicy="no-referrer">
             <h4 style="margin:6px 0;">{v['title']} (女優: {v['actress']})</h4>
-            <p style="margin:4px 0; color:#64748b; font-size:12px;">上架日期: {v.get('release_date', '未知')}</p>
+            <p style="margin:4px 0; color:#64748b; font-size:12px;">上架日期: {v.get('release_date') or '未知'}</p>
             <a href="{v['video_url']}" target="_blank">前往觀看</a>
-        </div>""" for v in new_videos
+        </div>""" for v in sorted_new
     ])
-    html_content = f"<h2>今日更新通知 (台灣時間: {get_taiwan_now_str()})</h2><p>本次新收錄 <strong>{len(new_videos)}</strong> 部：</p>{items_html}"
+    html_content = f"<h2>今日更新通知 (台灣時間: {get_taiwan_now_str()})</h2><p>本次新收錄 <strong>{len(sorted_new)}</strong> 部：</p>{items_html}"
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -641,7 +669,7 @@ async def run_scraper():
 
     seen_urls = set()
     newly_added_videos = []
-    run_base_time = get_taiwan_now()
+    run_base_time_str = get_taiwan_now_str()
 
     async with Stealth().use_async(async_playwright()) as p:
         try:
@@ -734,9 +762,7 @@ async def run_scraper():
                                 tags_str = ", ".join(tags_list) if tags_list else "一般"
 
                                 if has_target_tag:
-                                    # 依發現順序給予遞減 1 秒的時間戳，確保最先出現的新片排在第一位
-                                    item_ts = (run_base_time - timedelta(seconds=len(newly_added_videos))).strftime("%Y-%m-%d %H:%M:%S")
-                                    if save_video(video_title, cover_image_url, tags_str, actress_name, full_url, release_date, custom_created_at=item_ts):
+                                    if save_video(video_title, cover_image_url, tags_str, actress_name, full_url, release_date, custom_created_at=run_base_time_str):
                                         newly_added_videos.append({
                                             "title": video_title, "cover_url": cover_image_url,
                                             "tags": tags_str, "actress": actress_name, "video_url": full_url,
@@ -834,8 +860,7 @@ async def run_scraper():
                                     break
 
                         if has_genre_match:
-                            item_ts = (run_base_time - timedelta(seconds=len(newly_added_videos))).strftime("%Y-%m-%d %H:%M:%S")
-                            if save_video(video_title, cover_image_url, tags_str, actress_name, video_url, release_date, custom_created_at=item_ts):
+                            if save_video(video_title, cover_image_url, tags_str, actress_name, video_url, release_date, custom_created_at=run_base_time_str):
                                 newly_added_videos.append({
                                     "title": video_title, "cover_url": cover_image_url,
                                     "tags": tags_str, "actress": actress_name, "video_url": video_url,
